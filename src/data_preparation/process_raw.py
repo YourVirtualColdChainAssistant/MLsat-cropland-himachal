@@ -16,47 +16,48 @@ def process_raw(images_dir):
     raw_dir = images_dir + 'raw/'
     if not os.path.exists(raw_dir):
         os.mkdir(raw_dir)
-    # unzip_products(raw_dir)
+    # raw safe files
+    safe_dir = images_dir + 'safe/'
+    if not os.path.exists(safe_dir):
+        os.mkdir(safe_dir)
+    # unzip_products(raw_dir, safe_dir)
 
-    # L1C to L2A
+    # sen2cor
     corrected_dir = images_dir + 'corrected/'
     if not os.path.exists(corrected_dir):
         os.mkdir(corrected_dir)
     # absolute path to call sen2cor
-    sen2cor_loc = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
-    atmospheric_correction(sen2cor_loc, raw_dir, corrected_dir, args.resolution)
+    sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
+    atmospheric_correction(sen2cor_path, safe_dir, corrected_dir)
 
     # merge to single raster
     geotiff_dir = images_dir + 'geotiff/'
     if not os.path.exists(geotiff_dir):
         os.mkdir(geotiff_dir)
-    # raster_converter(corrected_dir, geotiff_dir)
+    raster_converter(corrected_dir, geotiff_dir)
 
 
-def unzip_products(raw_data_dir):
-    raw_files = [f for f in os.listdir(raw_data_dir) if re.match('.*zip', f)]
+def unzip_products(raw_dir, safe_dir):
+    raw_files = os.listdir(raw_dir)
     for i, raw_file in enumerate(raw_files, start=1):
-        raw_file_dir = raw_data_dir + raw_file
+        raw_file_dir = raw_dir + raw_file
         with zipfile.ZipFile(raw_file_dir, 'r') as zip_file:
             print(f"[{i}/{len(raw_files)}] Unzipping {raw_file_dir}")
-            zip_file.extractall(raw_data_dir)
+            zip_file.extractall(safe_dir)
     print("Unzip done!")
 
 
-def atmospheric_correction(sen2cor_loc, raw_dir, corrected_dir, resolution=None):
-    safe_files = [f for f in os.listdir(raw_dir) if re.match('.*SAFE', f)]
+def atmospheric_correction(sen2cor_path, safe_dir, corrected_dir):
+    safe_files = os.listdir(safe_dir)
     # safe_files = ['S2A_MSIL1C_20210502T053641_N0300_R005_T43SFR_20210502T074642.SAFE']
     for i, safe_file in enumerate(safe_files, start=1):
-        safe_file_dir = raw_dir + safe_file
+        safe_file_dir = safe_dir + safe_file
         if is_corrected(safe_file_dir, corrected_dir):
             print(f"[{i}/{len(safe_files)}] {safe_file_dir} corrected!")
         else:
             print(f"[{i}/{len(safe_files)}] Correcting {safe_file_dir}")
             # output tif rather than jp2
-            if resolution is None:
-                os.system(f"{sen2cor_loc} {safe_file_dir} --output_dir {corrected_dir} --tif")
-            else:
-                os.system(f"{sen2cor_loc} {safe_file_dir} --output_dir {corrected_dir} --resolution {resolution} --tif")
+            os.system(f"{sen2cor_path} {safe_file_dir} --output_dir {corrected_dir} --tif")
     print("Correction done!")
 
 
@@ -109,7 +110,7 @@ def raster_converter(corrected_dir, geotiff_dir):
         file_name = os.listdir(input_dir)[0]
         input_dir += file_name + '/IMG_DATA/R10m/*.tif'
         output_dir = geotiff_dir + file_name + '.tiff'
-        # merge_to_single_raster(input_dir, output_dir)
+        merge_to_single_raster(input_dir, output_dir)
         print(f'Saved {output_dir}')
 
 
@@ -124,10 +125,6 @@ if __name__ == '__main__':
         '--images_dir',
         type=str,
         default='N:/dataorg-datasets/sentinel2_images/images_danya/'
-    )
-    parser.add_argument(
-        '--resolution',
-        default=None
     )
     args = parser.parse_args()
     main(args)
