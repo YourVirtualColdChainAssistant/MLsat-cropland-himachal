@@ -17,7 +17,7 @@ def download_raw_data(user, pwd, raw_data_dir):
 
     # search by polygon, time, and Hub query keywords
     # polygon = geojson.Polygon(polygon) # can download by polygon region
-    products = api.query(date=('20200101', '20200131'),
+    products = api.query(date=('20200801', '20200831'),
                          platformname='Sentinel-2',
                          processinglevel='Level-1C',
                          raw='tileid:43SFR',
@@ -46,6 +46,6 @@ if __name__ == '__main__':
     parser.add_argument('--password', type=str,
                         default='empa.401')
     parser.add_argument('--raw_data_dir', type=str,
-                        default='N:/dataorg-datasets/sentinel2_images/images_danya/raw/')
+                        default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/raw/')
     args = parser.parse_args()
     main(args)

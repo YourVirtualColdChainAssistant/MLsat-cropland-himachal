@@ -1,11 +1,11 @@
 import os
-import re
 import glob
 import shutil
 import zipfile
 import argparse
 import rasterio
-
+from rasterio.io import MemoryFile
+from rasterio.merge import merge
 
 def main(args):
     process_raw(args.images_dir)
@@ -34,7 +34,7 @@ def process_raw(images_dir):
     geotiff_dir = images_dir + 'geotiff/'
     if not os.path.exists(geotiff_dir):
         os.mkdir(geotiff_dir)
-    raster_converter(corrected_dir, geotiff_dir)
+    merge2single_raster(corrected_dir, geotiff_dir)
 
 
 def unzip_products(raw_dir, safe_dir):
@@ -56,8 +56,7 @@ def atmospheric_correction(sen2cor_path, safe_dir, corrected_dir):
             print(f"[{i}/{len(safe_files)}] {safe_file_dir} corrected!")
         else:
             print(f"[{i}/{len(safe_files)}] Correcting {safe_file_dir}")
-            # output tif rather than jp2
-            os.system(f"{sen2cor_path} {safe_file_dir} --output_dir {corrected_dir} --tif")
+            os.system(f"{sen2cor_path} {safe_file_dir} --output_dir {corrected_dir}")
     print("Correction done!")
 
 
@@ -83,12 +82,13 @@ def is_corrected(safe_dir_to_correct, corrected_dir):
     return False
 
 
-def merge_to_single_raster(input_dir, output_dir):
+def to_single_raster(input_dir, output_dir):
     """ Convert a folder of multiple geotiff images as a single multi-band geotiff
             INPUT : input_dir (str) -> path to the input folder as (path_to_folder/../*.tiff)
                     output_dir (str) -> path to where the geotiff will be saved (path_to_folder/../image_name.tiff)
             OUTPUT : None
         """
+    # order is fixed by `sorted`
     file_path = [f for f in sorted(glob.glob(input_dir))]
     # Read metadata of first file
     with rasterio.open(file_path[0]) as src0:
@@ -102,20 +102,59 @@ def merge_to_single_raster(input_dir, output_dir):
                 dst.write_band(i, src1.read(1))
 
 
-def raster_converter(corrected_dir, geotiff_dir):
+def merge2single_raster(corrected_dir, geotiff_dir):
     file_paths = [f for f in os.listdir(corrected_dir)]
     # save to single geotiff
     for file_path in file_paths:
         input_dir = corrected_dir + file_path + '/GRANULE/'
         file_name = os.listdir(input_dir)[0]
-        input_dir += file_name + '/IMG_DATA/R10m/*.tif'
+        input_dir += file_name + '/IMG_DATA/R10m/*_B*.jp2'
         output_dir = geotiff_dir + file_name + '.tiff'
-        merge_to_single_raster(input_dir, output_dir)
+        to_single_raster(input_dir, output_dir)
         print(f'Saved {output_dir}')
 
 
-def merge_tiles():
-    pass
+def clip_raster(tiff_name, proj=None):
+    """Clip the raster with given projection
+
+    :param tiff_name: [str] name to open
+    :param proj: [shp] given projection
+    :return:
+    """
+    if proj is not None:
+        with rasterio.open(tiff_name) as src:
+            out_image, out_transform = rasterio.mask.mask(src, proj.geometry, crop=True)
+            out_meta = src.meta.copy()
+            out_meta.update({"driver": "GTiff",
+                             "height": out_image.shape[1],
+                             "width": out_image.shape[2],
+                             "transform": out_transform})
+
+        masked_name = masked_name = tiff_name.split('.')[0] + '_masked.' + tiff_name.split('.')[1]
+        with rasterio.open(masked_name, "w", **out_meta) as dest:
+            dest.write(out_image)
+            print(f'Write {masked_name}.')
+    else:
+        print('No projection for clipping.')
+
+
+# not using
+def merge_tiles(img_ds, f1, f2, t1, t2):
+    def create_dataset(data, crs, transform):
+        # Receives a 2D array, a transform and a crs to create a rasterio dataset
+        mem_file = MemoryFile()
+        dataset = mem_file.open(driver='GTiff', height=data.shape[0], width=data.shape[1],
+                                count=1, crs=crs, transform=transform, dtype=data.dtype)
+        dataset.write(data, 1)
+
+        return dataset
+
+    file1 = create_dataset(f1[0], img_ds['B2'].profile['crs'], t1)
+    file2 = create_dataset(f2[0], img_ds['B2'].profile['crs'], t2)
+
+    merged, transform = merge([file1, file2])
+
+    return merged, transform
 
 
 if __name__ == '__main__':
@@ -124,7 +163,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--images_dir',
         type=str,
-        default='N:/dataorg-datasets/sentinel2_images/images_danya/'
+        default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/'
     )
     args = parser.parse_args()
     main(args)
