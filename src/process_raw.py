@@ -1,14 +1,53 @@
 import os
+import re
 import glob
 import shutil
 import zipfile
 import argparse
+
+import geojson
+from sentinelsat import SentinelAPI
+
 import rasterio
 from rasterio.io import MemoryFile
 from rasterio.merge import merge
 
+
 def main(args):
+    # download_raw(args.user, args.password, args.images_dir)
     process_raw(args.images_dir)
+
+
+def download_raw(user, pwd, images_dir):
+    # raw directory
+    raw_dir = images_dir + 'raw/'
+    if not os.path.exists(raw_dir):
+        os.mkdir(raw_dir)
+
+    # connect to API
+    api = SentinelAPI(user, pwd)
+
+    # search by polygon, time, and Hub query keywords
+    # polygon = geojson.Polygon(polygon) # can download by polygon region
+    products = api.query(date=('20200801', '20200831'),
+                         platformname='Sentinel-2',
+                         processinglevel='Level-1C',
+                         raw='tileid:43SFR',
+                         )
+    print(f'Find {len(products)} products!')
+
+    # check the number of online and offline products
+    off_nb = 0
+    for p_id in products.keys():
+        p_info = api.get_product_odata(p_id)
+        if not p_info['Online']:
+            off_nb += 1
+    print(f'{len(products) - off_nb} online + {off_nb} offline products')
+
+    # download all results from the search
+    api.download_all(products, directory_path=raw_dir)
+
+    print('Downloaded all the required data!')
 
 
 def process_raw(images_dir):
@@ -159,11 +198,18 @@ def merge_tiles(img_ds, f1, f2, t1, t2):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # configuration
+    # authentication
+    parser.add_argument(
+        '--user',
+        type=str,
+        default='danyayay')
+    parser.add_argument(
+        '--password',
+        type=str,
+        default='empa.401')
     parser.add_argument(
         '--images_dir',
         type=str,
-        default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/'
-    )
+        default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/')
     args = parser.parse_args()
     main(args)
