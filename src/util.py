@@ -1,19 +1,200 @@
+import os
+import re
+import numpy as np
+from datetime import datetime
+import geopandas as gpd
+import fiona
 import skimage
+import pyproj
 import rasterio
+from rasterio.mask import mask
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 
 
 def load_geotiff(path, window=None):
     """ Load the geotiff as a list of numpy array.
         INPUT : path (str) -> the path to the geotiff
-                window (raterio.windows.Window) -> the window to use when loading the image
-        OUTPUT : band (list of numpy array) -> the different bands as float scalled to 0:1
-                 meta (dictionnary) -> the metadata associated with the geotiff
+                window (rasterio.windows.Window) -> the window to use when loading the image
+        OUTPUT : band (list of numpy array) -> the different bands as float scaled to 0:1
+                 meta (dictionary) -> the metadata associated with the geotiff
     """
     with rasterio.open(path) as f:
         band = [skimage.img_as_float(f.read(i+1, window=window)) for i in range(f.count)]
         meta = f.meta
-        if window != None:
+        if window is not None:
             meta['height'] = window.height
             meta['width'] = window.width
             meta['transform'] = f.window_transform(window)
     return band, meta
+
+
+def upsampling_20m_to_10m():
+    pass
+
+
+def split_raster():
+    pass
+
+
+def clip_all_raster(images_dir, shape_filepath='../data/study-area/study_area.shp'):
+    # shape file information
+    with fiona.open(shape_filepath, "r") as shapefile:
+        shapes = [feature["geometry"] for feature in shapefile if feature["geometry"] is not None]
+    shape_crs = gpd.read_file(shape_filepath).crs
+
+    # geotiff directory
+    geotiff_dir = images_dir + 'geotiff/'
+    # clip directory
+    clip_dir = images_dir + 'clip/'
+    if not os.path.exists(clip_dir):
+        os.mkdir(clip_dir)
+
+    # clip all the raster
+    for filename in [f for f in os.listdir(geotiff_dir) if f.endswith('.tiff')]:
+        geotiff_filepath = geotiff_dir + filename
+        clip_filepath = clip_dir + filename
+        clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath)
+
+
+def clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath):
+    # get the coordinate system of raster
+    raster = rasterio.open(geotiff_filepath)
+
+    # check if two coordinate systems are the same
+    if shape_crs != raster.crs:
+        reproject_single_raster(shape_crs, geotiff_filepath, clip_filepath)
+        # read imagery file
+        with rasterio.open(clip_filepath) as src:
+            out_image, out_transform = mask(src, shapes, crop=True)
+            out_meta = src.meta
+    else:
+        # read imagery file
+        with rasterio.open(geotiff_filepath) as src:
+            out_image, out_transform = mask(src, shapes, crop=True)
+            out_meta = src.meta
+
+    # Save clipped imagery
+    out_meta.update({"driver": "GTiff",
+                     "height": out_image.shape[1],
+                     "width": out_image.shape[2],
+                     "transform": out_transform})
+
+    with rasterio.open(clip_filepath, "w", **out_meta) as dst:
+        # out_image.shape (band, height, width)
+        dst.write(out_image)
+
+
+def reproject_single_raster(dst_crs, input_file, transformed_file):
+    """
+    :param dst_crs: output projection system
+    :param input_file
+    :param transformed_file
+    :return:
+    """
+    with rasterio.open(input_file) as imagery:
+        transform, width, height = calculate_default_transform(imagery.crs, dst_crs, imagery.width, imagery.height,
+                                                               *imagery.bounds)
+        kwargs = imagery.meta.copy()
+        kwargs.update({'crs': dst_crs, 'transform': transform, 'width': width, 'height': height})
+        with rasterio.open(transformed_file, 'w', **kwargs) as dst:
+            for i in range(1, imagery.count + 1):
+                reproject(
+                    source=rasterio.band(imagery, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=imagery.transform,
+                    src_crs=imagery.crs,
+                    dst_transform=transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.nearest)
+
+
+def stack_all_timestamps(from_dir):
+    # stack images of different timestamp
+    stacked_raster = dict(band=[], meta=[], timestamp=[])
+    for filename in os.listdir(from_dir):
+        raster_filepath = from_dir + filename
+        band, meta = load_geotiff(raster_filepath)
+        timestamp = re.split('[_.]', filename)[-2]
+        stacked_raster['band'].append(np.stack(band, axis=2))
+        stacked_raster['meta'] = meta
+        stacked_raster['timestamp'].append(datetime.strptime(timestamp, '%Y%m%dT%H%M%S%f'))
+    return stacked_raster
+
+
+def prepare_labels():
+    pass
+
+
+def dropna_in_shapefile(from_shp_path, to_shp_path=None):
+    shapefile = gpd.read_file(from_shp_path)
+    shapefile = shapefile.dropna().reset_index(drop=True)
+    if to_shp_path is None:
+        shapefile.to_file(from_shp_path)
+    else:
+        shapefile.to_file(to_shp_path)
+
+
+def load_target_shp(path, transform=None, proj_out=None):
+    """ Load the shapefile as a list of numpy array of coordinates
+        INPUT : path (str) -> the path to the shapefile
+                transform (rasterio.Affine) -> the affine transformation to get the polygon in row;col format from UTM.
+        OUTPUT : poly (list of np.array) -> list of polygons (as numpy.array of coordinates)
+                 poly_rc (list of np.array) -> list of polygon in row-col format if a transform is given
+    """
+    with fiona.open(path) as shapefile:
+        proj_in = pyproj.Proj(shapefile.crs)
+        class_type = [feature['properties']['id'] for feature in shapefile]
+        features = [feature["geometry"] for feature in shapefile]
+    # reproject polygons if necessary
+    if proj_out is None or proj_in == proj_out:
+        poly = [np.array([(coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i in
+                range(len(features))]
+        print('No reprojection!')
+    else:
+        poly = [np.array(
+            [pyproj.transform(proj_in, proj_out, coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i
+                in range(len(features))]
+        print(f'Reproject from {proj_in} to {proj_out}')
+
+    poly_rc = None
+    # transform in row-col if a transform is given
+    if not transform is None:
+        poly_rc = [np.array([rasterio.transform.rowcol(transform, coord[0], coord[1])[::-1] for coord in p]) for p in
+                   poly]
+
+    return poly, poly_rc, class_type
+
+
+def compute_mask(polygon_list, img_w, img_h, val_list):
+    """ Get mask of class of a polygon list
+        INPUT : polygon_list (list od polygon in coordinates (x, y)) -> the polygons in row;col format
+                img_w (int) -> the image width
+                img_h (int) -> the image height
+                val_list(list of int) -> the class associated with each polygon
+        OUTPUT : img (np.array 2D) -> the mask in which the pixel value reflect its class (zero means no class)
+    """
+    img = np.zeros((img_h, img_w), dtype=np.uint8)  # skimage : row,col --> h,w
+    for polygon, val in zip(polygon_list, val_list):
+        rr, cc = skimage.draw.polygon(polygon[:, 1], polygon[:, 0], img.shape)
+        img[rr, cc] = val
+
+    return img
+
+
+def count_classes(y):
+    for i in np.unique(y):
+        print(f'Number of pixel taking {i} is {y[y==i].shape[0]}')
+
+
+def save_pred_geotiff(meta_src, pred, save_path):
+    # Register GDAL format drivers and configuration options with a context manager
+    with rasterio.Env():
+        # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
+        out_meta = meta_src.copy()
+        out_meta.update(
+            dtype=rasterio.uint8,
+            count=1,
+            compress='lzw')
+        with rasterio.open(save_path, 'w', **out_meta) as dst:
+            # reshape into (band, height, width)
+            dst.write(pred.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
