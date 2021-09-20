@@ -1,39 +1,41 @@
+import pandas as pd
+import argparse
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from sklearn.metrics import confusion_matrix, plot_confusion_matrix
-import matplotlib.pyplot as plt
-from .util import *
-from .visualization import plot_feature_importance
+from util import *
+from preprocessing import preprocessing
+from visualization import plot_timestamps, plot_feature_importance
 
 
 def main(args):
     # labels shapefile
-    dropna_in_shapefile('../data/labels/labels.shp', '../data/labels/labels_dropna.shp')
-
-    # clip according to some shapefile
-    # clip_all_raster(args.images_dir, shape_filepath='../data/study-area/study_area.shp')
+    # merge_shapefiles()
 
     # stack the images of all timestamps
-    stacked_raster = stack_all_timestamps(args.images_dir + 'clip/')
-    stacked_band = np.array(stacked_raster['band'])
-    meta_train = stacked_raster['meta']
+    bands_list, meta_train, timestamps_bf, timestamps_af, timestamps_weekly = \
+        equidistant_stack(args.img_dir + 'clip/')
+
+    # plot timestamps
+    plot_timestamps(timestamps_bf, '../figs/timestamps_bf.png')
+    plot_timestamps(timestamps_af, '../figs/timestamps_af.png')
 
     # load study area shapefile
-    _, region_rc_polygons, region_class_list = \
+    _, study_rc_polygons, study_class_list = \
         load_target_shp('../data/study-area/study_area.shp',
                         transform=meta_train['transform'],
                         proj_out=pyproj.Proj(meta_train['crs']))
-    region_mask = compute_mask(region_rc_polygons, meta_train['width'], meta_train['height'], region_class_list)
+    region_mask = compute_mask(study_rc_polygons, meta_train['width'], meta_train['height'], study_class_list)
     # load label shapefile
     train_polygons, train_rc_polygons, train_class_list = \
-        load_target_shp('../data/labels/labels_dropna.shp',
+        load_target_shp('../data/all-labels/all-labels.shp',
                         transform=meta_train['transform'],
                         proj_out=pyproj.Proj(meta_train['crs']))
     train_mask = compute_mask(train_rc_polygons, meta_train['width'], meta_train['height'], train_class_list)
 
-    # processing bands
-    df = preprocessing(stacked_band)
+    # feature engineering
+    num_of_weeks = len(timestamps_weekly)
+    df = preprocessing(num_of_weeks, bands_list)
     # pairing x and y
     df['label'] = train_mask.reshape(-1)
     # select those with class labels
@@ -60,6 +62,25 @@ def main(args):
     print(f'rf accuracy {rfc_score}')
     plot_feature_importance(df_train_val.columns[:-1], rfc.feature_importances_)
 
+
+def merge_shapefiles(to_label_path='../data/all-labels/all-labels.shp'):
+    # read all the shape files
+    old_apples_shp = gpd.read_file('../data/apples/survey20210716_polygons20210819_corrected20210831.shp')
+    new_apples_shp = gpd.read_file('../data/apples/survey20210825_polygons20210901.shp')
+    non_crops_shp = gpd.read_file('../data/non-crops/non-crop.shp')
+    other_crops_shp = gpd.read_file('../data/other-crops/other-crops.shp')
+
+    # put all shape files into one geo dataframe
+    all_labels_shp = gpd.GeoDataFrame(
+        pd.concat([old_apples_shp, new_apples_shp, other_crops_shp, non_crops_shp], axis=0))
+    all_labels_shp = all_labels_shp.dropna().reset_index(drop=True)  # delete empty polygons
+
+    # mask for the study area
+    study_area_shp = gpd.read_file('../data/study-area/study_area.shp')
+    labels_in_study = gpd.overlay(all_labels_shp, study_area_shp, how='intersection')
+    cols2drop = [col for col in ['id', 'id_2'] if col in labels_in_study.columns]
+    labels_in_study = labels_in_study.drop(cols2drop, axis=1).rename(columns={'id_1': 'id'})
+    labels_in_study.to_file(to_label_path)  # save to folder
 
 
 if __name__ == '__main__':

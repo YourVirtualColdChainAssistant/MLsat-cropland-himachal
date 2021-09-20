@@ -61,3 +61,4 @@ def compute_mask(polygon_list, img_w, img_h, val_list):
         img[rr, cc] = val
 
     return img
+
