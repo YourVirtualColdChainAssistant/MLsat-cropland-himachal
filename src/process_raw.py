@@ -12,10 +12,13 @@ import rasterio
 from rasterio.io import MemoryFile
 from rasterio.merge import merge
 
+from util import clip_raster
+
 
 def main(args):
     # download_raw(args.user, args.password, args.images_dir)
     process_raw(args.images_dir)
+    # clip_raster(args.images_dir, clip_from_shp='../data/study-area/study_area.shp')  # clip according to some shapefile
 
 
 def download_raw(user, pwd, images_dir):
@@ -153,8 +156,9 @@ def merge2single_raster(corrected_dir, geotiff_dir):
         print(f'Saved {output_dir}')
 
 
-def clip_raster(tiff_name, proj=None):
-    """Clip the raster with given projection
+def mask_raster(tiff_name, proj=None):
+    """
+    Clip and mask the raster with given projection.
 
     :param tiff_name: [str] name to open
     :param proj: [shp] given projection
@@ -174,7 +178,7 @@ def clip_raster(tiff_name, proj=None):
             dest.write(out_image)
             print(f'Write {masked_name}.')
     else:
-        print('No projection for clipping.')
+        print('No projection for masking.')
 
 
 # not using

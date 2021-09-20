@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 import rasterio
+from datetime import datetime
 
 
 def normalize(array):
@@ -126,3 +127,12 @@ def show_sat_and_mask(img_filepath, pred, meta_src, region_mask=None, save_path=
     # save side by side plot
     if save_path is not None:
         plt.savefig(save_path)
+
+
+def plot_timestamps(timestamps, save_path=None):
+    fig, ax = plt.subplots(1, 1, figsize=(12, 0.4))
+    plt.plot_date(timestamps, np.ones(len(timestamps)), '|', markersize=20)
+    plt.xlim(datetime(2020, 1, 1), datetime(2020, 12, 31))
+    ax.axes.get_yaxis().set_visible(False)
+    if save_path is not None:
+        plt.savefig(save_path, bbox_inches='tight')

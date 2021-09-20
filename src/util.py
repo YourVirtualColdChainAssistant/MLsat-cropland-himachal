@@ -1,7 +1,8 @@
 import os
 import re
 import numpy as np
-from datetime import datetime
+import pandas as pd
+from datetime import datetime, date, timedelta
 import geopandas as gpd
 import fiona
 import skimage
@@ -36,11 +37,11 @@ def split_raster():
     pass
 
 
-def clip_all_raster(images_dir, shape_filepath='../data/study-area/study_area.shp'):
+def clip_raster(images_dir, clip_from_shp='../data/study-area/study_area.shp'):
     # shape file information
-    with fiona.open(shape_filepath, "r") as shapefile:
+    with fiona.open(clip_from_shp, "r") as shapefile:
         shapes = [feature["geometry"] for feature in shapefile if feature["geometry"] is not None]
-    shape_crs = gpd.read_file(shape_filepath).crs
+    shape_crs = gpd.read_file(clip_from_shp).crs
 
     # geotiff directory
     geotiff_dir = images_dir + 'geotiff/'
@@ -108,17 +109,99 @@ def reproject_single_raster(dst_crs, input_file, transformed_file):
                     resampling=Resampling.nearest)
 
 
-def stack_all_timestamps(from_dir):
-    # stack images of different timestamp
-    stacked_raster = dict(band=[], meta=[], timestamp=[])
-    for filename in os.listdir(from_dir):
-        raster_filepath = from_dir + filename
-        band, meta = load_geotiff(raster_filepath)
-        timestamp = re.split('[_.]', filename)[-2]
-        stacked_raster['band'].append(np.stack(band, axis=2))
-        stacked_raster['meta'] = meta
-        stacked_raster['timestamp'].append(datetime.strptime(timestamp, '%Y%m%dT%H%M%S%f'))
-    return stacked_raster
+# def stack_all_timestamps(from_dir):
+#     # stack images of different timestamp
+#     stacked_filenames = []
+#     stacked_raster = dict(band=[], meta=[], timestamp=[])
+#     for filename in os.listdir(from_dir):
+#         # read file
+#         raster_filepath = from_dir + filename
+#         band, meta = load_geotiff(raster_filepath)
+#         # check if all black. yes -> discard, no -> continue
+#         if np.array(band).mean() != 0.0:
+#             stacked_filenames.append(raster_filepath)
+#             # get the data
+#             timestamp = re.split('[_.]', filename)[-2]
+#             stacked_raster['band'].append(np.stack(band, axis=2))
+#             stacked_raster['meta'] = meta
+#             stacked_raster['timestamp'].append(datetime.strptime(timestamp, '%Y%m%dT%H%M%S%f'))
+#     return stacked_raster
+
+
+def timestamp_sanity_check(timestamp_std, filename):
+    timestamp_get = datetime.strptime(re.split('[_.]', filename)[-2],
+                                      '%Y%m%dT%H%M%S%f').date()
+    timestamp_get = timestamp_get - timedelta(days=timestamp_get.weekday())
+    if timestamp_std != timestamp_get:
+        print(f'{timestamp_std} and {timestamp_get} do not match!')
+
+
+def get_weekly_timestamps():
+    date_start = date(2020, 1, 1)
+    date_end = date(2020, 12, 31)
+    date_start = date_start - timedelta(days=date_start.weekday())
+    date_end = date_end - timedelta(days=date_end.weekday())
+    d = date_start
+    weekly_timestamps = []
+    while d <= date_end:
+        weekly_timestamps.append(d)
+        d += timedelta(7)
+    return weekly_timestamps
+
+
+def equidistant_stack(from_dir):
+
+    # check all the timestamps, and find the corresponding Mon.
+    timestamps_bf = []
+    for filename in sorted(os.listdir(from_dir)):
+        timestamps_bf.append(datetime.strptime(re.split('[_.]', filename)[-2],
+                                               '%Y%m%dT%H%M%S%f').date())
+    timestamps_af = [ts - timedelta(days=ts.weekday()) for ts in timestamps_bf]
+    timestamps_weekly = get_weekly_timestamps()
+
+    # get the data shape
+    _, meta = load_geotiff(from_dir + os.listdir(from_dir)[0])
+
+    # stack equidistantly
+    timestamps_af_pd = pd.Series(timestamps_af)
+    bands_list = []
+    for timestamp in timestamps_weekly:
+        # get all the indices of that week
+        ids = timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index
+        # deal with empty week
+        if len(ids) == 0:
+            bands_list.append(np.zeros((meta['height'] * meta['width'], meta['count'])))
+        elif len(ids) == 1:
+            # read band
+            filename = sorted(os.listdir(from_dir))[ids[0]]
+            raster_filepath = from_dir + filename
+            band, _ = load_geotiff(raster_filepath)
+            # sanity check
+            timestamp_sanity_check(timestamp, raster_filepath)
+            # pixel values check
+            if np.array(band).mean() != 0.0:
+                # store
+                bands_list.append(np.stack(band, axis=2).reshape(-1, len(band)))
+            else:
+                print(f'Discard {filename} due to 0 values.')
+        else:
+            band_list = []
+            for id in ids:
+                # read band
+                filename = sorted(os.listdir(from_dir))[id]
+                raster_filepath = from_dir + filename
+                band, meta = load_geotiff(raster_filepath)
+                # sanity check
+                timestamp_sanity_check(timestamp, raster_filepath)
+                # pixel values check
+                if np.array(band).mean() != 0.0:
+                    # store
+                    band_list.append(np.stack(band, axis=2).reshape(-1, len(band)))
+                else:
+                    print(f'Discard {filename} due to 0 values.')
+            bands_list.append(np.stack(band_list, axis=2).mean(axis=2))
+
+    return bands_list, meta, timestamps_bf, timestamps_af, timestamps_weekly
 
 
 def prepare_labels():
