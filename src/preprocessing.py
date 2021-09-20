@@ -41,14 +41,11 @@ def add_features(img, new_features=['ndvi']):
     """
     new_bands = []
 
-    # select specific bands
-    # img = img[:, :, [1, 2, 3, 4]]
-
     # bands
-    blue = img[:, :, 0]
-    green = img[:, :, 1]
-    red = img[:, :, 2]
-    nir = img[:, :, 3]
+    blue = img[:, 0]
+    green = img[:, 1]
+    red = img[:, 2]
+    nir = img[:, 3]
 
     # add feature
     for feature in new_features:
@@ -61,25 +58,74 @@ def add_features(img, new_features=['ndvi']):
         elif feature == 'cvi':
             new_bands.append(calculate_cvi(green, red, nir))
 
-    return np.append(img, np.stack(new_bands, axis=2), axis=2)
+    return np.append(img, np.stack(new_bands, axis=1), axis=1)
 
 
-def get_statistics(op, data, axis):
+def get_raw_features(num_of_weeks, bands_list):
+    df_raw = pd.DataFrame()
+    for i in range(num_of_weeks):
+        new_col_name = [n + '_' + str(i + 1) for n in ['blue', 'green', 'red', 'nir']]
+        df_raw[new_col_name] = bands_list[i]
+    return df_raw
+
+
+def compute_statistics(op, data):
     if op == 'avg':
-        return np.mean(data, axis=axis)
+        return data.mean(axis=1)
     elif op == 'std':
-        return np.std(data, axis=axis)
+        return data.std(axis=1)
     elif op == 'max':
-        return np.max(data, axis=axis)
+        return data.max(axis=1)
     else:
         return 'No corresponding calculation.'
 
 
-def preprocessing(stacked_band):
-    df = pd.DataFrame()
-    for i, band in enumerate(['blue', 'green', 'red', 'nir']):
-        for op in ['avg', 'std', 'max']:
-            col_name = band + '_' + op
-            reshaped_band = stacked_band[..., i].reshape(stacked_band[..., i].shape[0], -1)
-            df[col_name] = get_statistics(op, reshaped_band, 0)
+def get_statistics_by_band(band, num_of_weeks, df):
+    cols = [band + '_' + str(i + 1) for i in range(num_of_weeks)]
+    df_new = pd.DataFrame()
+    for op in ['avg', 'std', 'max']:
+        col_name = band + '_' + op
+        df_new[col_name] = compute_statistics(op, df[cols])
+    return df_new
+
+
+def get_statistics(bands, num_of_weeks, df):
+    df_new_list = []
+    for band in bands:
+        df_new_list.append(get_statistics_by_band(band, num_of_weeks, df))
+    df_new = pd.concat(df_new_list, axis=1)
+    return df_new
+
+
+def get_difference_by_band(band, num_of_weeks, df):
+    df_new = pd.DataFrame()
+    for i in range(1, num_of_weeks):
+        df_new[band + '_diff_' + str(i)] = df[band + '_' + str(i + 1)] - df[band + '_' + str(i)]
+    return df_new
+
+
+def get_difference(bands, num_of_weeks, df):
+    df_new_list = []
+    for band in bands:
+        df_new_list.append(get_difference_by_band(band, num_of_weeks, df))
+    df_new = pd.concat(df_new_list, axis=1)
+    return df_new
+
+
+def preprocessing(num_of_weeks, bands_list, new_features=None):
+    bands = ['blue', 'green', 'red', 'nir']
+    # add more features
+    if new_features is not None:
+        for t in range(len(bands_list)):
+            bands_list[t] = add_features(bands_list[t], new_features)
+        bands += new_features
+    # raw features
+    df = get_raw_features(num_of_weeks, bands_list)
+    df_list = [df]
+    # statistics
+    df_list.append(get_statistics(bands, num_of_weeks, df))
+    # difference of two successive timestamps
+    df_list.append(get_difference(bands, num_of_weeks, df))
+    # concatenate
+    df = pd.concat(df_list, axis=1)
     return df
