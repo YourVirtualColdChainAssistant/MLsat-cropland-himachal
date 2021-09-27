@@ -1,11 +1,13 @@
 import pandas as pd
+from skimage.draw import draw
+import pickle
 import argparse
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from util import *
 from preprocessing import preprocessing
-from visualization import plot_timestamps, plot_feature_importance
+from visualization import plot_timestamps
 
 
 def main(args):
@@ -13,8 +15,8 @@ def main(args):
     # merge_shapefiles()
 
     # stack the images of all timestamps
-    bands_list, meta_train, timestamps_bf, timestamps_af, timestamps_weekly = \
-        equidistant_stack(args.img_dir + 'clip/')
+    bands_array, meta_train, timestamps_bf, timestamps_af, timestamps_weekly = \
+        equidistant_stack(args.images_dir + 'clip_labels/')
 
     # plot timestamps
     plot_timestamps(timestamps_bf, '../figs/timestamps_bf.png')
@@ -35,32 +37,51 @@ def main(args):
 
     # feature engineering
     num_of_weeks = len(timestamps_weekly)
-    df = preprocessing(num_of_weeks, bands_list)
+    df = preprocessing(num_of_weeks, bands_array, new_features=['ndvi'])
     # pairing x and y
     df['label'] = train_mask.reshape(-1)
-    # select those with class labels
+    df.to_csv('../data/df.csv', index=False)
+    # select those with labels (deduct whose labels are 0)
     df_train_val = df[df['label'] != 0].reset_index(drop=True)
     # prepare x and y
     x = df_train_val.iloc[:, :-1].values
-    y = df_train_val.label.values
-    print(f'x.shape {x.shape}, y.shape {y.shape}')
+    y_3class = df_train_val.label.values  # raw data with 3 classes
+    y = y_3class.copy()
+    y[y == 2] = 1  # modify to 2 classes
+
+    # print labels
+    print('With 3 classes:')
+    count_classes(y_3class)
+    print('With 2 classes:')
     count_classes(y)
+
     # split train validation set
     x_train, x_val, y_train, y_val = \
         train_test_split(x, y, test_size=0.2, random_state=42)
+    print(f'features: {df.columns[:-1]}')
+    print(f'x.shape {x.shape}, y.shape {y.shape}')
+    print(f'x_train.shape {x_train.shape}, y_train.shape {y_train.shape}')
+    print(f'x_val.shape {x_val.shape}, y_val.shape {y_val.shape}')
 
     ### models
     # SVM
+    print("Training SVM...")
     svm = SVC()
     svm.fit(x_train, y_train)
     svm_score = svm.score(x_val, y_val)
-    print(f'svm accuracy {svm_score}')
+    print(f'SVM accuracy {svm_score}')
+    # save the model to disk
+    pickle.dump(svm, open('../models/svm.sav', 'wb'))
+    # load:: svm = pickle.load(open(filename, 'rb')
+
     # Random forest
+    print("Training RF...")
     rfc = RandomForestClassifier()
     rfc.fit(x_train, y_train)
     rfc_score = rfc.score(x_val, y_val)
-    print(f'rf accuracy {rfc_score}')
-    plot_feature_importance(df_train_val.columns[:-1], rfc.feature_importances_)
+    print(f'RF accuracy {rfc_score}')
+    pickle.dump(svm, open('../models/rfc.sav', 'wb'))
+    feature_importance_table(df_train_val.columns[:-1], rfc.feature_importances_, '../preds/rfc_importance.csv')
 
 
 def merge_shapefiles(to_label_path='../data/all-labels/all-labels.shp'):
