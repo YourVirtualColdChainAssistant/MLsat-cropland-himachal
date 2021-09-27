@@ -17,8 +17,8 @@ from util import clip_raster
 
 def main(args):
     # download_raw(args.user, args.password, args.images_dir)
-    process_raw(args.images_dir)
-    # clip_raster(args.images_dir, clip_from_shp='../data/study-area/study_area.shp')  # clip according to some shapefile
+    # process_raw(args.images_dir)
+    clip_raster(args.images_dir, clip_from_shp='../data/study-area/study_area.shp')  # clip according to some shapefile
 
 
 def download_raw(user, pwd, images_dir):
@@ -103,23 +103,36 @@ def atmospheric_correction(sen2cor_path, safe_dir, corrected_dir):
 
 
 def is_corrected(safe_dir_to_correct, corrected_dir):
+    # filename inside the GRANULE folder in safe folder
     name_to_correct = os.listdir(safe_dir_to_correct + '/GRANULE/')[0]
-    # check what's in the corrected folder
+    # check what's in the corrected folder one by one
     for safe_corrected in os.listdir(corrected_dir):
+        # filename inside the GRANULE folder in corrected folder
         name_corrected = os.listdir(corrected_dir + safe_corrected + '/GRANULE/')[0]
-        path_corrected = corrected_dir + safe_corrected + '/GRANULE/' + name_corrected
+        path_corrected = corrected_dir + safe_corrected + '/GRANULE/' + name_corrected + '/IMG_DATA/'
+        # check if two folder names are the same
         flag_name = name_to_correct.split('_')[1:] == name_corrected.split('_')[1:]
+        if not flag_name:
+            continue
         # TODO: fail if no file in GRANULE...
-        tmp_files = os.listdir(path_corrected)
-        flag_tmp = False
-        for f in tmp_files:
-            if f.startswith('tmp'):
-                flag_tmp = True
+        # check file existence
+        res_expected_num = [7, 13, 15]
+        flag_res = True
+        for i, res in enumerate(['R10m/', 'R20m/', 'R60m/']):
+            if os.path.exists(path_corrected + res):
+                if len(os.listdir(path_corrected + res)) != res_expected_num[i]:
+                    # file number doesn't match
+                    flag_res = False
+                    shutil.rmtree(corrected_dir + safe_corrected)
+                    print(f'Deleted {corrected_dir + safe_corrected}')
+                    break
+            else:
+                # resolution files are not existent
+                flag_res = False
                 shutil.rmtree(corrected_dir + safe_corrected)
                 print(f'Deleted {corrected_dir + safe_corrected}')
                 break
-        # if flag name already exists and no temporary files, then the correction is done.
-        if flag_name and not flag_tmp:
+        if flag_res:
             return True
     return False
 
@@ -146,14 +159,15 @@ def to_single_raster(input_dir, output_dir):
 
 def merge2single_raster(corrected_dir, geotiff_dir):
     file_paths = [f for f in os.listdir(corrected_dir)]
+    print('\nStart merging raster...')
     # save to single geotiff
-    for file_path in file_paths:
+    for i, file_path in enumerate(file_paths, start=1):
         input_dir = corrected_dir + file_path + '/GRANULE/'
         file_name = os.listdir(input_dir)[0]
         input_dir += file_name + '/IMG_DATA/R10m/*_B*.jp2'
         output_dir = geotiff_dir + file_name + '.tiff'
         to_single_raster(input_dir, output_dir)
-        print(f'Saved {output_dir}')
+        print(f'[{i}/{len(file_paths)}] merged {output_dir}')
 
 
 def mask_raster(tiff_name, proj=None):
