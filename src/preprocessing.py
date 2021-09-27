@@ -34,38 +34,45 @@ def calculate_cvi(green, red, nir):
 
 def add_features(img, new_features=['ndvi']):
     """
+    Add new features to the original bands.
+
     band02 = blue --> idx = 0
     band03 = green --> idx = 1
     band04 = red --> idx = 2
     band08 = nir --> idx = 3
     """
-    new_bands = []
+    if new_features is None:
+        print('No band is added.')
+        return img
+    else:
+        print(f'Adding new features {new_features}')
+        new_bands = []
 
-    # bands
-    blue = img[:, 0]
-    green = img[:, 1]
-    red = img[:, 2]
-    nir = img[:, 3]
+        # bands
+        blue = img[:, 0]
+        green = img[:, 1]
+        red = img[:, 2]
+        nir = img[:, 3]
 
-    # add feature
-    for feature in new_features:
-        if feature == 'ndvi':
-            new_bands.append(calculate_ndvi(red, nir))
-        elif feature == 'gndvi':
-            new_bands.append(calculate_gndvi(green, nir))
-        elif feature == 'evi':
-            new_bands.append(calculate_evi(blue, blue, nir))
-        elif feature == 'cvi':
-            new_bands.append(calculate_cvi(green, red, nir))
+        # add feature
+        for feature in new_features:
+            if feature == 'ndvi':
+                new_bands.append(calculate_ndvi(red, nir))
+            elif feature == 'gndvi':
+                new_bands.append(calculate_gndvi(green, nir))
+            elif feature == 'evi':
+                new_bands.append(calculate_evi(blue, blue, nir))
+            elif feature == 'cvi':
+                new_bands.append(calculate_cvi(green, red, nir))
 
-    return np.append(img, np.stack(new_bands, axis=1), axis=1)
+        return np.append(img, np.stack(new_bands, axis=1), axis=1)
 
 
-def get_raw_features(num_of_weeks, bands_list):
+def get_raw_features(bands_name, num_of_weeks, bands_array):
     df_raw = pd.DataFrame()
     for i in range(num_of_weeks):
-        new_col_name = [n + '_' + str(i + 1) for n in ['blue', 'green', 'red', 'nir']]
-        df_raw[new_col_name] = bands_list[i]
+        new_col_name = [n + '_' + str(i+1) for n in bands_name]
+        df_raw[new_col_name] = bands_array[:, :, i]  # fragmented df, please use pd.concat()
     return df_raw
 
 
@@ -90,6 +97,7 @@ def get_statistics_by_band(band, num_of_weeks, df):
 
 
 def get_statistics(bands, num_of_weeks, df):
+    print("Adding statistics as features...")
     df_new_list = []
     for band in bands:
         df_new_list.append(get_statistics_by_band(band, num_of_weeks, df))
@@ -100,11 +108,12 @@ def get_statistics(bands, num_of_weeks, df):
 def get_difference_by_band(band, num_of_weeks, df):
     df_new = pd.DataFrame()
     for i in range(1, num_of_weeks):
-        df_new[band + '_diff_' + str(i)] = df[band + '_' + str(i + 1)] - df[band + '_' + str(i)]
+        df_new[band + '_diff_' + str(i)] = df[band + '_' + str(i + 1)] - df[band + '_' + str(i)]  # fragmented df, please use pd.concat(
     return df_new
 
 
 def get_difference(bands, num_of_weeks, df):
+    print("Adding difference as features...")
     df_new_list = []
     for band in bands:
         df_new_list.append(get_difference_by_band(band, num_of_weeks, df))
@@ -112,20 +121,28 @@ def get_difference(bands, num_of_weeks, df):
     return df_new
 
 
-def preprocessing(num_of_weeks, bands_list, new_features=None):
-    bands = ['blue', 'green', 'red', 'nir']
+def preprocessing(num_of_weeks, bands_array, new_features=None):
+    """
+    Preprocessing includes
+    :param num_of_weeks: int
+    :param bands_array: array
+        shape (height * width, num_of_ands, num_of_week)
+    :param new_features: list of string
+    :return:
+    """
+    print('Start preprocessing features...')
+    bands_name = ['blue', 'green', 'red', 'nir']
     # add more features
     if new_features is not None:
-        for t in range(len(bands_list)):
-            bands_list[t] = add_features(bands_list[t], new_features)
-        bands += new_features
+        bands_array = add_features(bands_array, new_features)
+        bands_name += new_features
     # raw features
-    df = get_raw_features(num_of_weeks, bands_list)
+    df = get_raw_features(bands_name, num_of_weeks, bands_array)
     df_list = [df]
     # statistics
-    df_list.append(get_statistics(bands, num_of_weeks, df))
+    df_list.append(get_statistics(bands_name, num_of_weeks, df))
     # difference of two successive timestamps
-    df_list.append(get_difference(bands, num_of_weeks, df))
+    df_list.append(get_difference(bands_name, num_of_weeks, df))
     # concatenate
     df = pd.concat(df_list, axis=1)
     return df
