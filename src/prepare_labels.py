@@ -27,38 +27,38 @@ def load_target_shp(path, transform=None, proj_out=None):
         proj_in = pyproj.Proj(shapefile.crs)
         class_type = [feature['properties']['id'] for feature in shapefile]
         features = [feature["geometry"] for feature in shapefile]
-    # reproject polygons if necessary
+    # re-project polygons if necessary
     if proj_out is None or proj_in == proj_out:
         poly = [np.array([(coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i in
                 range(len(features))]
-        print('No reprojection!')
+        print('No re-projection!')
     else:
         poly = [np.array(
             [pyproj.transform(proj_in, proj_out, coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i
                 in range(len(features))]
-        print(f'Reproject from {proj_in} to {proj_out}')
+        print(f'Re-project from {proj_in} to {proj_out}')
 
     poly_rc = None
     # transform in row-col if a transform is given
-    if not transform is None:
+    if transform is not None:
         poly_rc = [np.array([rasterio.transform.rowcol(transform, coord[0], coord[1])[::-1] for coord in p]) for p in
                    poly]
+    print('Loaded target shape files.')
 
     return poly, poly_rc, class_type
 
 
-def compute_mask(polygon_list, img_w, img_h, val_list):
+def compute_mask(polygon_list, meta, val_list):
     """ Get mask of class of a polygon list
         INPUT : polygon_list (list od polygon in coordinates (x, y)) -> the polygons in row;col format
-                img_w (int) -> the image width
-                img_h (int) -> the image height
+                meta -> the image width and height
                 val_list(list of int) -> the class associated with each polygon
         OUTPUT : img (np.array 2D) -> the mask in which the pixel value reflect it's class (zero being the absence of class)
     """
-    img = np.zeros((img_h, img_w), dtype=np.uint8)  # skimage : row,col --> h,w
+    img = np.zeros((meta['height'], meta['width']), dtype=np.uint8)  # skimage : row,col --> h,w
     for polygon, val in zip(polygon_list, val_list):
         rr, cc = skimage.draw.polygon(polygon[:, 1], polygon[:, 0], img.shape)
         img[rr, cc] = val
-
+    print("Added targets' mask.")
     return img
 

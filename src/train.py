@@ -6,7 +6,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from util import *
-from preprocessing import preprocessing
+from prepare_labels import *
+from preprocessing import preprocess
 from visualization import plot_timestamps
 
 
@@ -16,44 +17,44 @@ def main(args):
 
     # stack the images of all timestamps
     bands_array, meta_train, timestamps_bf, timestamps_af, timestamps_weekly = \
-        equidistant_stack(args.images_dir + 'clip_labels/')
+        equidistant_stack(args.images_dir + 'clip/')
 
     # plot timestamps
     plot_timestamps(timestamps_bf, '../figs/timestamps_bf.png')
     plot_timestamps(timestamps_af, '../figs/timestamps_af.png')
 
     # load study area shapefile
+    print('*** Loading target shape files ***')
     _, study_rc_polygons, study_class_list = \
         load_target_shp('../data/study-area/study_area.shp',
                         transform=meta_train['transform'],
                         proj_out=pyproj.Proj(meta_train['crs']))
-    region_mask = compute_mask(study_rc_polygons, meta_train['width'], meta_train['height'], study_class_list)
+    region_mask = compute_mask(study_rc_polygons, meta_train, study_class_list)
     # load label shapefile
     train_polygons, train_rc_polygons, train_class_list = \
         load_target_shp('../data/all-labels/all-labels.shp',
                         transform=meta_train['transform'],
                         proj_out=pyproj.Proj(meta_train['crs']))
-    train_mask = compute_mask(train_rc_polygons, meta_train['width'], meta_train['height'], train_class_list)
+    train_mask = compute_mask(train_rc_polygons, meta_train, train_class_list)
 
     # feature engineering
-    num_of_weeks = len(timestamps_weekly)
-    df = preprocessing(num_of_weeks, bands_array, new_features=['ndvi'])
+    df = preprocess(timestamps_weekly, bands_array, train_mask.reshape(-1), new_features=['ndvi'])
     # pairing x and y
     df['label'] = train_mask.reshape(-1)
-    df.to_csv('../data/df.csv', index=False)
+
     # select those with labels (deduct whose labels are 0)
     df_train_val = df[df['label'] != 0].reset_index(drop=True)
     # prepare x and y
     x = df_train_val.iloc[:, :-1].values
     y_3class = df_train_val.label.values  # raw data with 3 classes
     y = y_3class.copy()
-    y[y == 2] = 1  # modify to 2 classes
 
-    # print labels
+    # modify to 2 classes
+    # y[y == 2] = 1
     print('With 3 classes:')
     count_classes(y_3class)
-    print('With 2 classes:')
-    count_classes(y)
+    # print('With 2 classes:')
+    # count_classes(y)
 
     # split train validation set
     x_train, x_val, y_train, y_val = \
@@ -72,7 +73,7 @@ def main(args):
     print(f'SVM accuracy {svm_score}')
     # save the model to disk
     pickle.dump(svm, open('../models/svm.sav', 'wb'))
-    # load:: svm = pickle.load(open(filename, 'rb')
+    # load:: svm = pickle.load(open(filename, 'rb'))
 
     # Random forest
     print("Training RF...")

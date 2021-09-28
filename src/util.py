@@ -51,10 +51,24 @@ def clip_raster(images_dir, clip_from_shp='../data/study-area/study_area.shp'):
         os.mkdir(clip_dir)
 
     # clip all the raster
-    for filename in [f for f in os.listdir(geotiff_dir) if f.endswith('.tiff')]:
+    filenames = [f for f in sorted(os.listdir(geotiff_dir)) if f.endswith('.tiff')]
+    print('\nStart clipping...')
+    for i, filename in enumerate(filenames, start=1):
         geotiff_filepath = geotiff_dir + filename
         clip_filepath = clip_dir + filename
-        clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath)
+        if not is_clipped(clip_filepath):
+            print(f'[{i}/{len(filenames)}] Clipping {clip_filepath}')
+            clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath)
+        else:
+            print(f'[{i}/{len(filenames)}] {clip_filepath} clipped')
+    print(f'Clip done!')
+
+
+def is_clipped(clip_filepath):
+    if os.path.exists(clip_filepath) and not os.path.exists(clip_filepath + '.aux.xml'):
+        return True
+    else:
+        return False
 
 
 def clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath):
@@ -151,117 +165,71 @@ def get_weekly_timestamps():
 
 def equidistant_stack(from_dir):
 
-    # check all the timestamps, and find the corresponding Mon.
+    print('*** Stacking equidistantly ***')
+
+    # sorted available files
+    filenames = sorted(os.listdir(from_dir))
+
+    # find all the time stamps in "from" folder
     timestamps_bf = []
-    for filename in sorted(os.listdir(from_dir)):
+    for filename in filenames:
         timestamps_bf.append(datetime.strptime(re.split('[_.]', filename)[-2],
                                                '%Y%m%dT%H%M%S%f').date())
+    # find all corresponding Monday, thus equally spaced
     timestamps_af = [ts - timedelta(days=ts.weekday()) for ts in timestamps_bf]
+    # date of all Monday in 2020
     timestamps_weekly = get_weekly_timestamps()
 
-    # get the data shape
+    # get bands' meta data
     _, meta = load_geotiff(from_dir + os.listdir(from_dir)[0])
 
     # stack equidistantly
     timestamps_af_pd = pd.Series(timestamps_af)
     bands_list = []
-    for timestamp in timestamps_weekly:
+    for i, timestamp in enumerate(timestamps_weekly, start=1):
         # get all the indices of that week
         ids = timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index
-        # deal with empty week
+        # with empty week
         if len(ids) == 0:
-            bands_list.append(np.zeros((meta['height'] * meta['width'], meta['count'])))
-        elif len(ids) == 1:
-            # read band
-            filename = sorted(os.listdir(from_dir))[ids[0]]
-            raster_filepath = from_dir + filename
-            band, _ = load_geotiff(raster_filepath)
-            # sanity check
-            timestamp_sanity_check(timestamp, raster_filepath)
-            # pixel values check
-            if np.array(band).mean() != 0.0:
-                # store
-                bands_list.append(np.stack(band, axis=2).reshape(-1, len(band)))
-            else:
-                print(f'Discard {filename} due to 0 values.')
-        else:
             band_list = []
+            # band_list = np.zeros((meta['height'] * meta['width'], meta['count']))
+            # print(f'[{i}/{len(timestamps_weekly)}] {timestamp} (none)')
+        # with single or multiple week
+        else:
+            band_list, black_ids = [], []
             for id in ids:
                 # read band
-                filename = sorted(os.listdir(from_dir))[id]
+                filename = filenames[id]
                 raster_filepath = from_dir + filename
                 band, meta = load_geotiff(raster_filepath)
                 # sanity check
                 timestamp_sanity_check(timestamp, raster_filepath)
                 # pixel values check
                 if np.array(band).mean() != 0.0:
-                    # store
                     band_list.append(np.stack(band, axis=2).reshape(-1, len(band)))
                 else:
-                    print(f'Discard {filename} due to 0 values.')
-            bands_list.append(np.stack(band_list, axis=2).mean(axis=2))
+                    black_ids.append(id)
+                    print(f' Discard {filename} due to 0 values.')
+            if len(band_list) != 0:
+                band_list = np.stack(band_list, axis=2).mean(axis=2)
+                # format printing
+                print(f'[{i}/{len(timestamps_weekly)}] {timestamp} (', end=" ")
+                for id in ids:
+                    if id in black_ids:
+                        print(f'x{timestamps_bf[id]}', end=", ")
+                    else:
+                        print(timestamps_bf[id], end=", ")
+                print(')', end='\n')
+            else:
+                # band_list = np.zeros((meta['height'] * meta['width'], meta['count']))  # fill in 0
+                band_list = bands_list[-1]  # fill in the last band_list
+                print(f'[{i}/{len(timestamps_weekly)}] {timestamp} (last bands)')
+        bands_list.append(band_list)
+    bands_array = np.stack(bands_list, axis=2)
 
-    return bands_list, meta, timestamps_bf, timestamps_af, timestamps_weekly
+    print('\tDone!')
 
-
-def prepare_labels():
-    pass
-
-
-def dropna_in_shapefile(from_shp_path, to_shp_path=None):
-    shapefile = gpd.read_file(from_shp_path)
-    shapefile = shapefile.dropna().reset_index(drop=True)
-    if to_shp_path is None:
-        shapefile.to_file(from_shp_path)
-    else:
-        shapefile.to_file(to_shp_path)
-
-
-def load_target_shp(path, transform=None, proj_out=None):
-    """ Load the shapefile as a list of numpy array of coordinates
-        INPUT : path (str) -> the path to the shapefile
-                transform (rasterio.Affine) -> the affine transformation to get the polygon in row;col format from UTM.
-        OUTPUT : poly (list of np.array) -> list of polygons (as numpy.array of coordinates)
-                 poly_rc (list of np.array) -> list of polygon in row-col format if a transform is given
-    """
-    with fiona.open(path) as shapefile:
-        proj_in = pyproj.Proj(shapefile.crs)
-        class_type = [feature['properties']['id'] for feature in shapefile]
-        features = [feature["geometry"] for feature in shapefile]
-    # reproject polygons if necessary
-    if proj_out is None or proj_in == proj_out:
-        poly = [np.array([(coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i in
-                range(len(features))]
-        print('No reprojection!')
-    else:
-        poly = [np.array(
-            [pyproj.transform(proj_in, proj_out, coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i
-                in range(len(features))]
-        print(f'Reproject from {proj_in} to {proj_out}')
-
-    poly_rc = None
-    # transform in row-col if a transform is given
-    if not transform is None:
-        poly_rc = [np.array([rasterio.transform.rowcol(transform, coord[0], coord[1])[::-1] for coord in p]) for p in
-                   poly]
-
-    return poly, poly_rc, class_type
-
-
-def compute_mask(polygon_list, img_w, img_h, val_list):
-    """ Get mask of class of a polygon list
-        INPUT : polygon_list (list od polygon in coordinates (x, y)) -> the polygons in row;col format
-                img_w (int) -> the image width
-                img_h (int) -> the image height
-                val_list(list of int) -> the class associated with each polygon
-        OUTPUT : img (np.array 2D) -> the mask in which the pixel value reflect its class (zero means no class)
-    """
-    img = np.zeros((img_h, img_w), dtype=np.uint8)  # skimage : row,col --> h,w
-    for polygon, val in zip(polygon_list, val_list):
-        rr, cc = skimage.draw.polygon(polygon[:, 1], polygon[:, 0], img.shape)
-        img[rr, cc] = val
-
-    return img
+    return bands_array, meta, timestamps_bf, timestamps_af, timestamps_weekly
 
 
 def count_classes(y):
@@ -269,7 +237,7 @@ def count_classes(y):
         print(f'Number of pixel taking {i} is {y[y==i].shape[0]}')
 
 
-def save_pred_geotiff(meta_src, pred, save_path):
+def save_predictions_geotiff(meta_src, predictions, save_path):
     # Register GDAL format drivers and configuration options with a context manager
     with rasterio.Env():
         # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
@@ -280,4 +248,11 @@ def save_pred_geotiff(meta_src, pred, save_path):
             compress='lzw')
         with rasterio.open(save_path, 'w', **out_meta) as dst:
             # reshape into (band, height, width)
-            dst.write(pred.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
+            dst.write(predictions.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
+
+
+def feature_importance_table(feature_name, feature_importance, save_path):
+    df = pd.DataFrame()
+    df['feature_name'] = feature_name
+    df['feature_importance'] = feature_importance
+    df.sort_values(by=['feature_importance']).to_csv(save_path, index=False)

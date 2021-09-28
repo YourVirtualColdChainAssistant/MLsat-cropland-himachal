@@ -6,3 +6,5 @@ fiona
 rasterio
 scikit-image
 pyproj
+matplotlib
+sklearn
