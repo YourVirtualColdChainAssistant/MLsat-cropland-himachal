@@ -1,3 +1,4 @@
+import random
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -100,13 +101,14 @@ def show_mask(classes_array, region_mask, title, windows=None, save_path=None):
     plt.title(title)
     if save_path is not None:
         plt.savefig(save_path)
+        print(f'Saved mask to {save_path}')
 
 
-def plot_feature_importance(columns, feature_importance, save_path=None):
-    plt.bar(columns, feature_importance)
-    plt.xticks(rotation = 45)
-    if save_path is not None:
-        plt.savefig(save_path)
+# def plot_feature_importance(columns, feature_importance, save_path=None):
+#     plt.bar(columns, feature_importance)
+#     plt.xticks(rotation = 45)
+#     if save_path is not None:
+#         plt.savefig(save_path)
 
 
 def show_sat_and_mask(img_filepath, pred, meta_src, region_mask=None, save_path=None):
@@ -127,6 +129,7 @@ def show_sat_and_mask(img_filepath, pred, meta_src, region_mask=None, save_path=
     # save side by side plot
     if save_path is not None:
         plt.savefig(save_path)
+        print(f'Saved satellite image and its mask to {save_path}')
 
 
 def plot_timestamps(timestamps, save_path=None):
@@ -136,3 +139,44 @@ def plot_timestamps(timestamps, save_path=None):
     ax.axes.get_yaxis().set_visible(False)
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
+        print(f'Saved time stamps to {save_path}')
+
+
+# def plot_ndvi_profile(df_ndvi, timestamps_weekly, save_path=None):
+#     """
+#
+#     :param df_ndvi: DataFrame
+#         shape (height * width, ndvi time profile)
+#     :return:
+#     """
+#     _ = plt.subplots(1, 1, figsize=(10, 7))
+#     labels = np.unique(df_ndvi['label'].values)
+#     colors_map = {0: 'black', 1: 'red', 2: 'green', 3: 'blue'}
+#     for label in labels:
+#         ndvi_label = df_ndvi[df_ndvi['label'] == label].iloc[:, :-1]
+#         for i in random.sample(range(ndvi_label.shape[0]), 100):
+#             plt.plot(timestamps_weekly, ndvi_label.iloc[i, :], color=colors_map[label], lw=0.5, alpha=0.2)
+#         plt.plot(timestamps_weekly, ndvi_label.mean(axis=0), color=colors_map[label], lw=2)
+#     if save_path is not None:
+#         plt.savefig(save_path)
+#         print(f'Saved ndvi profile to {save_path}')
+
+
+def plot_ndvi_profile(ndvi_array, train_mask, timestamps_weekly, save_path=None):
+    """
+
+    :param ndvi_array: np.array
+        shape (height * width, ndvi time profile)
+    :return:
+    """
+    _ = plt.subplots(1, 1, figsize=(10, 7))
+    labels = np.unique(train_mask)
+    colors_map = {0: 'black', 1: 'red', 2: 'green', 3: 'blue'}
+    for label in labels:
+        ndvi_label = ndvi_array[train_mask == label]
+        for i in random.sample(range(ndvi_label.shape[0]), 100):
+            plt.plot(timestamps_weekly, ndvi_label[i, :], color=colors_map[label], lw=0.5, alpha=0.2)
+        plt.plot(timestamps_weekly, ndvi_label.mean(axis=0), color=colors_map[label], lw=2)
+    if save_path is not None:
+        plt.savefig(save_path)
+        print(f'Saved ndvi profile to {save_path}')
