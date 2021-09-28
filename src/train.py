@@ -16,12 +16,12 @@ def main(args):
     # merge_shapefiles()
 
     # stack the images of all timestamps
-    bands_array, meta_train, timestamps_bf, timestamps_af, timestamps_weekly = \
-        equidistant_stack(args.images_dir + 'clip/')
+    bands_array, meta_train, timestamps_raw, timestamps_weekly, timestamps_weekly_index = \
+        stack_all_timestamps(args.images_dir + 'clip/')
 
     # plot timestamps
-    plot_timestamps(timestamps_bf, '../figs/timestamps_bf.png')
-    plot_timestamps(timestamps_af, '../figs/timestamps_af.png')
+    plot_timestamps(timestamps_raw, '../figs/timestamps_raw.png')
+    plot_timestamps(timestamps_weekly, '../figs/timestamps_weekly.png')
 
     # load study area shapefile
     print('*** Loading target shape files ***')

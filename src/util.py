@@ -148,9 +148,20 @@ def timestamp_sanity_check(timestamp_std, filename):
     timestamp_get = timestamp_get - timedelta(days=timestamp_get.weekday())
     if timestamp_std != timestamp_get:
         print(f'{timestamp_std} and {timestamp_get} do not match!')
+        exit()
+
+
+def choices_sanity_check(choices, choice, var_name):
+    if choice not in choices:
+        print(f'{choice} is unavailable. Please choose "{var_name}" from {choices}')
+        exit()
 
 
 def get_weekly_timestamps():
+    """
+    Get the date of all Monday in 2020.
+
+    """
     date_start = date(2020, 1, 1)
     date_end = date(2020, 12, 31)
     date_start = date_start - timedelta(days=date_start.weekday())
@@ -163,40 +174,69 @@ def get_weekly_timestamps():
     return weekly_timestamps
 
 
-def equidistant_stack(from_dir):
+def get_monthly_timestamps():
+    """
+    Get the first day of each month in 2020.
 
-    print('*** Stacking equidistantly ***')
+    """
+    date_start = date(2020, 1, 1)
+    monthly_timestamps = []
+    for m in range(1, 13):
+        monthly_timestamps.append(date_start.replace(month=m))
+    return monthly_timestamps
 
+
+def stack_all_timestamps(from_dir, way='weekly', interpolation='previous'):
+    """
+    Stack all the timestamps in from_dir folder, ignoring all black images.
+
+    :param from_dir: string
+    :param way: string
+        choices = ['raw', 'weekly', 'monthly']
+    :param interpolation: string
+        choices = ['zero', 'previous']
+
+    :return: bands_array, meta, timestamps_bf, timestamps_af, timestamps_weekly
+        timestamps_bf: the raw timestamps
+    """
+
+    print(f'----- Stacking all timestamps {way} -----')
+
+    # ### sanity check
+    choices_sanity_check(['raw', 'weekly', 'monthly'], way, 'way')
+    choices_sanity_check(['zero', 'previous'], interpolation, 'interpolation')
+
+    # ### raw files
     # sorted available files
     filenames = sorted(os.listdir(from_dir))
-
-    # find all the time stamps in "from" folder
+    # get bands' meta data
+    _, meta = load_geotiff(from_dir + os.listdir(from_dir)[0])
+    # find all the raw time stamps
     timestamps_bf = []
     for filename in filenames:
         timestamps_bf.append(datetime.strptime(re.split('[_.]', filename)[-2],
                                                '%Y%m%dT%H%M%S%f').date())
-    # find all corresponding Monday, thus equally spaced
-    timestamps_af = [ts - timedelta(days=ts.weekday()) for ts in timestamps_bf]
-    # date of all Monday in 2020
-    timestamps_weekly = get_weekly_timestamps()
 
-    # get bands' meta data
-    _, meta = load_geotiff(from_dir + os.listdir(from_dir)[0])
+    # ### check the way to stack
+    if way == 'raw':
+        timestamps_af = timestamps_bf
+        timestamps_ref = timestamps_bf
+    elif way == 'weekly':
+        timestamps_af = [ts - timedelta(days=ts.weekday()) for ts in timestamps_bf]  # datetime.weekday() returns 0~6
+        timestamps_ref = get_weekly_timestamps()
+    else:
+        timestamps_af = [ts - timedelta(days=ts.day) + 1 for ts in timestamps_bf]  # datetime.day returns 1-31
+        timestamps_ref = get_monthly_timestamps()
 
-    # stack equidistantly
+    # ### stack all the timestamps
     timestamps_af_pd = pd.Series(timestamps_af)
-    bands_list = []
-    for i, timestamp in enumerate(timestamps_weekly, start=1):
-        # get all the indices of that week
+    bands_list, black_ids = [], []
+    for i, timestamp in enumerate(timestamps_ref, start=1):
+        # get all the indices
         ids = timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index
-        # with empty week
-        if len(ids) == 0:
-            band_list = []
-            # band_list = np.zeros((meta['height'] * meta['width'], meta['count']))
-            # print(f'[{i}/{len(timestamps_weekly)}] {timestamp} (none)')
-        # with single or multiple week
-        else:
-            band_list, black_ids = [], []
+        band_list = []
+        # with non-empty data, check missing data
+        if len(ids) != 0:
             for id in ids:
                 # read band
                 filename = filenames[id]
@@ -209,27 +249,46 @@ def equidistant_stack(from_dir):
                     band_list.append(np.stack(band, axis=2).reshape(-1, len(band)))
                 else:
                     black_ids.append(id)
-                    print(f' Discard {filename} due to 0 values.')
-            if len(band_list) != 0:
-                band_list = np.stack(band_list, axis=2).mean(axis=2)
-                # format printing
-                print(f'[{i}/{len(timestamps_weekly)}] {timestamp} (', end=" ")
-                for id in ids:
-                    if id in black_ids:
-                        print(f'x{timestamps_bf[id]}', end=", ")
-                    else:
-                        print(timestamps_bf[id], end=", ")
-                print(')', end='\n')
+                    print(f'\tDiscard {filename} due to empty value.')
+        # stack by index
+        if len(band_list) != 0:
+            band_list = np.stack(band_list, axis=2).mean(axis=2)
+            # format printing
+            print(f'[{i}/{len(timestamps_ref)}] {timestamp} (', end=" ")
+            for id in ids:
+                if id in black_ids:
+                    print(f'x{timestamps_bf[id]}', end=", ")
+                else:
+                    print(timestamps_bf[id], end=", ")
+            print(')', end='\n')
+        else:
+            # fill in all zero
+            if interpolation == 'zero':
+                band_list = np.zeros((meta['height'] * meta['width'], meta['count']))
+                print(f'[{i}/{len(timestamps_ref)}] {timestamp} (0)')
+            # fill in the last band_list
             else:
-                # band_list = np.zeros((meta['height'] * meta['width'], meta['count']))  # fill in 0
-                band_list = bands_list[-1]  # fill in the last band_list
-                print(f'[{i}/{len(timestamps_weekly)}] {timestamp} (last bands)')
+                band_list = bands_list[-1]
+                print(f'[{i}/{len(timestamps_ref)}] {timestamp} (last bands)')
         bands_list.append(band_list)
+    # stack finally
     bands_array = np.stack(bands_list, axis=2)
+    print('Stack is done!')
 
-    print('\tDone!')
+    return bands_array, meta, timestamps_bf, timestamps_af, timestamps_ref
 
-    return bands_array, meta, timestamps_bf, timestamps_af, timestamps_weekly
+
+def format_print_in_stack(timestamps_bf, timestamps_af, timestamps_ref, ):
+    timestamps_af_pd = pd.Series(timestamps_af)
+    for i, timestamp in enumerate(timestamps_ref):
+        ids = timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index
+        print(f'[{i}/{len(timestamps_ref)}] {timestamp} (', end=" ")
+        for id in ids:
+            if id in black_ids:
+                print(f'x{timestamps_bf[id]}', end=", ")
+            else:
+                print(timestamps_bf[id], end=", ")
+        print(')', end='\n')
 
 
 def count_classes(y):
