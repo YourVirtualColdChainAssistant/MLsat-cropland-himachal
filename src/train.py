@@ -8,29 +8,36 @@ from sklearn.svm import SVC
 from util import *
 from prepare_labels import *
 from preprocessing import preprocess
-from visualization import plot_timestamps
+from visualization import plot_timestamps, NVDI_profile
 
 
 def main(args):
     # labels shapefile
     # merge_shapefiles()
 
-    # stack the images of all timestamps
-    bands_array, meta_train, timestamps_raw, timestamps_weekly, timestamps_weekly_index = \
+    # check NDVI profile
+    ndvi_profile = NVDI_profile(args.images_dir + 'clip/', '../data/all-labels/all-labels.shp')
+    ndvi_profile.raw_profile()
+    ndvi_profile.weekly_profile()
+    ndvi_profile.monthly_profile()
+
+    # stack timestamps
+    bands_array, meta_train, timestamps_raw, timestamps_weekly, timestamps_weekly_ref = \
         stack_all_timestamps(args.images_dir + 'clip/')
 
     # plot timestamps
     plot_timestamps(timestamps_raw, '../figs/timestamps_raw.png')
     plot_timestamps(timestamps_weekly, '../figs/timestamps_weekly.png')
 
-    # load study area shapefile
+    # load shapefile labels
     print('*** Loading target shape files ***')
-    _, study_rc_polygons, study_class_list = \
-        load_target_shp('../data/study-area/study_area.shp',
-                        transform=meta_train['transform'],
-                        proj_out=pyproj.Proj(meta_train['crs']))
-    region_mask = compute_mask(study_rc_polygons, meta_train, study_class_list)
-    # load label shapefile
+    # study region shapefile
+    # _, study_rc_polygons, study_class_list = \
+    #     load_target_shp('../data/study-area/study_area.shp',
+    #                     transform=meta_train['transform'],
+    #                     proj_out=pyproj.Proj(meta_train['crs']))
+    # region_mask = compute_mask(study_rc_polygons, meta_train, study_class_list)
+    # label shapefile
     train_polygons, train_rc_polygons, train_class_list = \
         load_target_shp('../data/all-labels/all-labels.shp',
                         transform=meta_train['transform'],
@@ -38,7 +45,7 @@ def main(args):
     train_mask = compute_mask(train_rc_polygons, meta_train, train_class_list)
 
     # feature engineering
-    df = preprocess(timestamps_weekly, bands_array, train_mask.reshape(-1), new_features=['ndvi'])
+    df = preprocess(timestamps_weekly_ref, bands_array, train_mask.reshape(-1), new_features=['ndvi'])
     # pairing x and y
     df['label'] = train_mask.reshape(-1)
 
@@ -50,11 +57,11 @@ def main(args):
     y = y_3class.copy()
 
     # modify to 2 classes
-    # y[y == 2] = 1
+    y[y == 2] = 1
     print('With 3 classes:')
     count_classes(y_3class)
-    # print('With 2 classes:')
-    # count_classes(y)
+    print('With 2 classes:')
+    count_classes(y)
 
     # split train validation set
     x_train, x_val, y_train, y_val = \

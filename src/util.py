@@ -10,6 +10,7 @@ import pyproj
 import rasterio
 from rasterio.mask import mask
 from rasterio.warp import calculate_default_transform, reproject, Resampling
+from preprocessing import add_features
 
 
 def load_geotiff(path, window=None):
@@ -123,25 +124,6 @@ def reproject_single_raster(dst_crs, input_file, transformed_file):
                     resampling=Resampling.nearest)
 
 
-# def stack_all_timestamps(from_dir):
-#     # stack images of different timestamp
-#     stacked_filenames = []
-#     stacked_raster = dict(band=[], meta=[], timestamp=[])
-#     for filename in os.listdir(from_dir):
-#         # read file
-#         raster_filepath = from_dir + filename
-#         band, meta = load_geotiff(raster_filepath)
-#         # check if all black. yes -> discard, no -> continue
-#         if np.array(band).mean() != 0.0:
-#             stacked_filenames.append(raster_filepath)
-#             # get the data
-#             timestamp = re.split('[_.]', filename)[-2]
-#             stacked_raster['band'].append(np.stack(band, axis=2))
-#             stacked_raster['meta'] = meta
-#             stacked_raster['timestamp'].append(datetime.strptime(timestamp, '%Y%m%dT%H%M%S%f'))
-#     return stacked_raster
-
-
 def timestamp_sanity_check(timestamp_std, filename):
     timestamp_get = datetime.strptime(re.split('[_.]', filename)[-2],
                                       '%Y%m%dT%H%M%S%f').date()
@@ -186,16 +168,78 @@ def get_monthly_timestamps():
     return monthly_timestamps
 
 
+def stack_valid_raw_ndvi(from_dir):
+    print('Stacking valid NDVI...')
+    bands_list_raw, timestamps_raw, timestamps_missing, meta = \
+        stack_valid_raw_timestamps(from_dir)
+    bands_array_raw = add_features(np.stack(bands_list_raw, axis=2), new_features=['ndvi'])
+    ndvi_array_raw = bands_array_raw[:, -1, :]
+    return ndvi_array_raw, timestamps_raw, meta
+
+
+def stack_equidistant_ndvi(ndvi_array_raw, timestamps_raw, meta, way, interpolation='previous'):
+    choices_sanity_check(['weekly', 'monthly'], way, 'way')
+    if way == 'weekly':
+        timestamps_af = [ts - timedelta(days=ts.weekday()) for ts in timestamps_raw]  # datetime.weekday() returns 0~6
+        timestamps_ref = get_weekly_timestamps()
+    else:
+        timestamps_af = [ts - timedelta(days=ts.day-1) for ts in timestamps_raw]  # datetime.day returns 1-31
+        timestamps_ref = get_monthly_timestamps()
+
+    # stack equidistantly
+    timestamps_af_pd = pd.Series(timestamps_af)
+    ndvi_list_eql = []
+    for i, timestamp in enumerate(timestamps_ref, start=1):
+        # get all the indices
+        ids = list(timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index)
+        # with non-empty data
+        if len(ids) != 0:
+            ndvi_array = ndvi_array_raw[:, ids].max(axis=1)
+            # format printing
+            print(f'[{i}/{len(timestamps_ref)}] {timestamp} (', end=" ")
+            for id in ids:
+                print(timestamps_raw[id], end=", ")
+            print(')', end='\n')
+        else:
+            if interpolation == 'zero' or i == 1:
+                ndvi_array = np.zeros(meta['height'] * meta['width'])
+                print(f'[{i}/{len(timestamps_ref)}] {timestamp} (0)')
+            else:
+                ndvi_array = ndvi_list_eql[-1]
+                print(f'[{i}/{len(timestamps_ref)}] {timestamp} (previous)')
+        ndvi_list_eql.append(ndvi_array)
+    ndvi_array_eql = np.stack(ndvi_list_eql, axis=1)
+
+    return ndvi_array_eql, timestamps_af, timestamps_ref
+
+
+def stack_valid_raw_timestamps(from_dir):
+    print('----- Stacking valid raw timestamps -----')
+    bands_list_valid, timestamps_valid, timestamps_missing = [], [], []
+    for filename in sorted(os.listdir(from_dir)):
+        raster_filepath = from_dir + filename
+        band, meta = load_geotiff(raster_filepath)
+        # pixel values check
+        if np.array(band).mean() != 0.0:
+            bands_list_valid.append(np.stack(band, axis=2).reshape(-1, len(band)))
+            timestamps_valid.append(datetime.strptime(re.split('[_.]', filename)[-2],
+                                                    '%Y%m%dT%H%M%S%f').date())
+        else:
+            timestamps_missing.append(datetime.strptime(re.split('[_.]', filename)[-2],
+                                                    '%Y%m%dT%H%M%S%f').date())
+            print(f'\tDiscard {filename} due to empty value.')
+    print('Done!')
+    return bands_list_valid, timestamps_valid, timestamps_missing, meta
+
+
 def stack_all_timestamps(from_dir, way='weekly', interpolation='previous'):
     """
     Stack all the timestamps in from_dir folder, ignoring all black images.
-
     :param from_dir: string
     :param way: string
         choices = ['raw', 'weekly', 'monthly']
     :param interpolation: string
         choices = ['zero', 'previous']
-
     :return: bands_array, meta, timestamps_bf, timestamps_af, timestamps_weekly
         timestamps_bf: the raw timestamps
     """
@@ -222,10 +266,11 @@ def stack_all_timestamps(from_dir, way='weekly', interpolation='previous'):
         timestamps_af = timestamps_bf
         timestamps_ref = timestamps_bf
     elif way == 'weekly':
-        timestamps_af = [ts - timedelta(days=ts.weekday()) for ts in timestamps_bf]  # datetime.weekday() returns 0~6
+        timestamps_af = [ts - timedelta(days=ts.weekday()) for ts in
+                         timestamps_bf]  # datetime.weekday() returns 0~6
         timestamps_ref = get_weekly_timestamps()
     else:
-        timestamps_af = [ts - timedelta(days=ts.day) + 1 for ts in timestamps_bf]  # datetime.day returns 1-31
+        timestamps_af = [ts - timedelta(days=ts.day-1) for ts in timestamps_bf]  # datetime.day returns 1-31
         timestamps_ref = get_monthly_timestamps()
 
     # ### stack all the timestamps
@@ -263,7 +308,7 @@ def stack_all_timestamps(from_dir, way='weekly', interpolation='previous'):
             print(')', end='\n')
         else:
             # fill in all zero
-            if interpolation == 'zero':
+            if interpolation == 'zero' or i == 1:
                 band_list = np.zeros((meta['height'] * meta['width'], meta['count']))
                 print(f'[{i}/{len(timestamps_ref)}] {timestamp} (0)')
             # fill in the last band_list
@@ -276,19 +321,6 @@ def stack_all_timestamps(from_dir, way='weekly', interpolation='previous'):
     print('Stack is done!')
 
     return bands_array, meta, timestamps_bf, timestamps_af, timestamps_ref
-
-
-def format_print_in_stack(timestamps_bf, timestamps_af, timestamps_ref, ):
-    timestamps_af_pd = pd.Series(timestamps_af)
-    for i, timestamp in enumerate(timestamps_ref):
-        ids = timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index
-        print(f'[{i}/{len(timestamps_ref)}] {timestamp} (', end=" ")
-        for id in ids:
-            if id in black_ids:
-                print(f'x{timestamps_bf[id]}', end=", ")
-            else:
-                print(timestamps_bf[id], end=", ")
-        print(')', end='\n')
 
 
 def count_classes(y):

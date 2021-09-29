@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from visualization import plot_ndvi_profile
 
 
 def calculate_ndvi(red, nir):
@@ -46,7 +45,7 @@ def add_features(img, new_features=['ndvi']):
         print(' No band is added.')
         return img
     else:
-        print(f' Adding new features {new_features}...')
+        print(f' Adding new bands {new_features}...')
         new_bands = []
 
         # bands
@@ -65,17 +64,17 @@ def add_features(img, new_features=['ndvi']):
                 new_bands.append(calculate_evi(blue, blue, nir))
             elif feature == 'cvi':
                 new_bands.append(calculate_cvi(green, red, nir))
-        print(f' Added {new_features}')
+        print(' ok')
         return np.append(img, np.stack(new_bands, axis=1), axis=1)
 
 
 def get_month_raw(bands_name, num_of_weeks, bands_array):
-    print(f' Adding raw features...')
+    print(' Adding raw features...')
     df_new = pd.DataFrame()
     for i in np.arange(0, num_of_weeks, 4):
         new_col_name = [n + '_' + str(i+1) for n in bands_name]
         df_new[new_col_name] = bands_array[:, :, i]  # fragmented df, please use pd.concat()
-    print(f' Added {df_new.shape[1]} new features.')
+    print(f' ok, {df_new.shape[1]} new features are added.')
     return df_new.copy()
 
 
@@ -145,10 +144,6 @@ def preprocess(timestamps_weekly, bands_array, train_mask, new_features=None):
         bands_array = add_features(bands_array, new_features)
         bands_name += new_features
     num_of_weeks = len(timestamps_weekly)
-
-    # check ndvi profile
-    print(' Plotting ndvi profile...')
-    plot_ndvi_profile(bands_array[:, -1, :], train_mask, timestamps_weekly, '../figs/ndvi_profile.png')
 
     # raw features
     df = get_month_raw(bands_name, num_of_weeks, bands_array)

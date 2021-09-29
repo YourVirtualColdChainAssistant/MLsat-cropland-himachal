@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 import rasterio
+import pyproj
 from datetime import datetime
+from util import stack_valid_raw_ndvi, stack_equidistant_ndvi
+from prepare_labels import *
 
 
 def normalize(array):
@@ -36,7 +39,7 @@ def show_true_color(raster, is_norm=True, save_path=None):
     img_rgb = get_rgb(raster, is_norm=is_norm)
 
     # View the color composite
-    fig = plt.subplots(figsize=(7, 7))
+    _ = plt.subplots(figsize=(7, 7))
     plt.imshow(img_rgb)
     if save_path is not None:
         plt.savefig(save_path)
@@ -47,7 +50,7 @@ def read_n_show_true_color(raster, is_norm=True, save_path=None):
     img_rgb = get_rgb(raster, is_norm=is_norm)
 
     # View the color composite
-    fig = plt.subplots(figsize=(7, 7))
+    _ = plt.subplots(figsize=(7, 7))
     plt.imshow(img_rgb)
     if save_path is not None:
         plt.savefig(save_path)
@@ -88,7 +91,7 @@ def show_mask(classes_array, region_mask, title, windows=None, save_path=None):
     mapped_colors[region_mask == 0] = np.array([0, 0, 0, 1])
 
     # show images
-    fig = plt.subplots(figsize=(10, 8))
+    _ = plt.subplots(figsize=(10, 8))
     if windows is None:
         im = plt.imshow(mapped_colors, cmap=mycmap, interpolation=None)
     else:
@@ -132,38 +135,25 @@ def show_sat_and_mask(img_filepath, pred, meta_src, region_mask=None, save_path=
         print(f'Saved satellite image and its mask to {save_path}')
 
 
-def plot_timestamps(timestamps, save_path=None):
+def plot_timestamps(timestamps, title=None, save_path=None):
     fig, ax = plt.subplots(1, 1, figsize=(12, 0.4))
     plt.plot_date(timestamps, np.ones(len(timestamps)), '|', markersize=20)
     plt.xlim(datetime(2020, 1, 1), datetime(2020, 12, 31))
     ax.axes.get_yaxis().set_visible(False)
+    if title is not None:
+        plt.title(title)
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved time stamps to {save_path}')
 
 
-# def plot_ndvi_profile(df_ndvi, timestamps_weekly, save_path=None):
-#     """
-#
-#     :param df_ndvi: DataFrame
-#         shape (height * width, ndvi time profile)
-#     :return:
-#     """
-#     _ = plt.subplots(1, 1, figsize=(10, 7))
-#     labels = np.unique(df_ndvi['label'].values)
-#     colors_map = {0: 'black', 1: 'red', 2: 'green', 3: 'blue'}
-#     for label in labels:
-#         ndvi_label = df_ndvi[df_ndvi['label'] == label].iloc[:, :-1]
-#         for i in random.sample(range(ndvi_label.shape[0]), 100):
-#             plt.plot(timestamps_weekly, ndvi_label.iloc[i, :], color=colors_map[label], lw=0.5, alpha=0.2)
-#         plt.plot(timestamps_weekly, ndvi_label.mean(axis=0), color=colors_map[label], lw=2)
-#     if save_path is not None:
-#         plt.savefig(save_path)
-#         print(f'Saved ndvi profile to {save_path}')
-
-
-def plot_ndvi_profile(ndvi_array, train_mask, timestamps_weekly, save_path=None):
+def plot_ndvi_profile(ndvi_array, train_mask, timestamps_ref, title=None, save_path=None):
     """
+    colors:
+    0 - black - no labels
+    1 - red - apples
+    2 - green - other crops
+    3 - blue - non crops
 
     :param ndvi_array: np.array
         shape (height * width, ndvi time profile)
@@ -172,11 +162,48 @@ def plot_ndvi_profile(ndvi_array, train_mask, timestamps_weekly, save_path=None)
     _ = plt.subplots(1, 1, figsize=(10, 7))
     labels = np.unique(train_mask)
     colors_map = {0: 'black', 1: 'red', 2: 'green', 3: 'blue'}
+    labels_map = {0: 'no labels', 1: 'apples', 2: 'other crops', 3: 'non crops'}
     for label in labels:
-        ndvi_label = ndvi_array[train_mask == label]
-        for i in random.sample(range(ndvi_label.shape[0]), 100):
-            plt.plot(timestamps_weekly, ndvi_label[i, :], color=colors_map[label], lw=0.5, alpha=0.2)
-        plt.plot(timestamps_weekly, ndvi_label.mean(axis=0), color=colors_map[label], lw=2)
+        if label != 3:
+            ndvi_label = ndvi_array[train_mask == label]
+            for i in random.sample(range(ndvi_label.shape[0]), 100):
+                plt.plot(timestamps_ref, ndvi_label[i, :], color=colors_map[label], lw=0.5, alpha=0.2)
+            plt.plot(timestamps_ref, ndvi_label.mean(axis=0), color=colors_map[label], lw=2, label=labels_map[label])
+    plt.legend(loc='best')
+    if title is not None:
+        plt.title(title)
     if save_path is not None:
         plt.savefig(save_path)
         print(f'Saved ndvi profile to {save_path}')
+
+
+class NVDI_profile(object):
+    """
+    This is a class for plotting different kinds of NDVI profiles.
+    When aggregating, always take the maximal value within a period.
+    """
+    def __init__(self, images_dir, label_shp):
+        self.ndvi_array_raw, self.timestamps_raw, self.meta = stack_valid_raw_ndvi(images_dir)
+        self.colors_map = {0: 'black', 1: 'red', 2: 'green', 3: 'blue'}
+        # get labels
+        _, train_rc_polygons, train_class_list = \
+            load_target_shp(label_shp,transform=self.meta['transform'],
+                            proj_out=pyproj.Proj(self.meta['crs']))
+        train_mask = compute_mask(train_rc_polygons, self.meta, train_class_list)
+        self.labels = train_mask.reshape(-1)
+
+    def raw_profile(self):
+        plot_ndvi_profile(self.ndvi_array_raw, self.labels, self.timestamps_raw,
+                          title='NDVI raw profile', save_path='../figs/NDVI_raw.png')
+
+    def weekly_profile(self, interpolation='previous'):
+        ndvi_array_weekly, _, timestamps_weekly_ref = \
+            stack_equidistant_ndvi(self.ndvi_array_raw, self.timestamps_raw, self.meta, 'weekly', interpolation)
+        plot_ndvi_profile(ndvi_array_weekly, self.labels, timestamps_weekly_ref,
+                          title='NDVI weekly profile', save_path='../figs/NDVI_weekly.png')
+
+    def monthly_profile(self, interpolation='previous'):
+        ndvi_array_monthly, _, timestamps_monthly_ref = \
+            stack_equidistant_ndvi(self.ndvi_array_raw, self.timestamps_raw, self.meta, 'monthly', interpolation)
+        plot_ndvi_profile(ndvi_array_monthly, self.labels, timestamps_monthly_ref,
+                          title='NDVI monthly profile', save_path='../figs/NDVI_monthly.png')
