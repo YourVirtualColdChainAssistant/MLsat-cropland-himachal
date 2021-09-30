@@ -1,16 +1,19 @@
 import os
 import re
+import sys
+import fiona
+import logging
+import datetime
 import numpy as np
 import pandas as pd
-from datetime import datetime, date, timedelta
 import geopandas as gpd
-import fiona
 import skimage
+import skimage.draw
 import pyproj
 import rasterio
 from rasterio.mask import mask
 from rasterio.warp import calculate_default_transform, reproject, Resampling
-from preprocessing import add_features
+from sklearn.inspection import permutation_importance
 
 
 def load_geotiff(path, window=None):
@@ -125,9 +128,9 @@ def reproject_single_raster(dst_crs, input_file, transformed_file):
 
 
 def timestamp_sanity_check(timestamp_std, filename):
-    timestamp_get = datetime.strptime(re.split('[_.]', filename)[-2],
+    timestamp_get = datetime.datetime.strptime(re.split('[_.]', filename)[-2],
                                       '%Y%m%dT%H%M%S%f').date()
-    timestamp_get = timestamp_get - timedelta(days=timestamp_get.weekday())
+    timestamp_get = timestamp_get - datetime.timedelta(days=timestamp_get.weekday())
     if timestamp_std != timestamp_get:
         print(f'{timestamp_std} and {timestamp_get} do not match!')
         exit()
@@ -144,15 +147,15 @@ def get_weekly_timestamps():
     Get the date of all Monday in 2020.
 
     """
-    date_start = date(2020, 1, 1)
-    date_end = date(2020, 12, 31)
-    date_start = date_start - timedelta(days=date_start.weekday())
-    date_end = date_end - timedelta(days=date_end.weekday())
+    date_start = datetime.date(2020, 1, 1)
+    date_end = datetime.date(2020, 12, 31)
+    date_start = date_start - datetime.timedelta(days=date_start.weekday())
+    date_end = date_end - datetime.timedelta(days=date_end.weekday())
     d = date_start
     weekly_timestamps = []
     while d <= date_end:
         weekly_timestamps.append(d)
-        d += timedelta(7)
+        d += datetime.timedelta(7)
     return weekly_timestamps
 
 
@@ -161,90 +164,30 @@ def get_monthly_timestamps():
     Get the first day of each month in 2020.
 
     """
-    date_start = date(2020, 1, 1)
+    date_start = datetime.date(2020, 1, 1)
     monthly_timestamps = []
     for m in range(1, 13):
         monthly_timestamps.append(date_start.replace(month=m))
     return monthly_timestamps
 
 
-def stack_valid_raw_ndvi(from_dir):
-    print('Stacking valid NDVI...')
-    bands_list_raw, timestamps_raw, timestamps_missing, meta = \
-        stack_valid_raw_timestamps(from_dir)
-    bands_array_raw = add_features(np.stack(bands_list_raw, axis=2), new_features=['ndvi'])
-    ndvi_array_raw = bands_array_raw[:, -1, :]
-    return ndvi_array_raw, timestamps_raw, meta
-
-
-def stack_equidistant_ndvi(ndvi_array_raw, timestamps_raw, meta, way, interpolation='previous'):
-    choices_sanity_check(['weekly', 'monthly'], way, 'way')
-    if way == 'weekly':
-        timestamps_af = [ts - timedelta(days=ts.weekday()) for ts in timestamps_raw]  # datetime.weekday() returns 0~6
-        timestamps_ref = get_weekly_timestamps()
-    else:
-        timestamps_af = [ts - timedelta(days=ts.day-1) for ts in timestamps_raw]  # datetime.day returns 1-31
-        timestamps_ref = get_monthly_timestamps()
-
-    # stack equidistantly
-    timestamps_af_pd = pd.Series(timestamps_af)
-    ndvi_list_eql = []
-    for i, timestamp in enumerate(timestamps_ref, start=1):
-        # get all the indices
-        ids = list(timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index)
-        # with non-empty data
-        if len(ids) != 0:
-            ndvi_array = ndvi_array_raw[:, ids].max(axis=1)
-            # format printing
-            print(f'[{i}/{len(timestamps_ref)}] {timestamp} (', end=" ")
-            for id in ids:
-                print(timestamps_raw[id], end=", ")
-            print(')', end='\n')
-        else:
-            if interpolation == 'zero' or i == 1:
-                ndvi_array = np.zeros(meta['height'] * meta['width'])
-                print(f'[{i}/{len(timestamps_ref)}] {timestamp} (0)')
-            else:
-                ndvi_array = ndvi_list_eql[-1]
-                print(f'[{i}/{len(timestamps_ref)}] {timestamp} (previous)')
-        ndvi_list_eql.append(ndvi_array)
-    ndvi_array_eql = np.stack(ndvi_list_eql, axis=1)
-
-    return ndvi_array_eql, timestamps_af, timestamps_ref
-
-
-def stack_valid_raw_timestamps(from_dir):
-    print('----- Stacking valid raw timestamps -----')
-    bands_list_valid, timestamps_valid, timestamps_missing = [], [], []
-    for filename in sorted(os.listdir(from_dir)):
-        raster_filepath = from_dir + filename
-        band, meta = load_geotiff(raster_filepath)
-        # pixel values check
-        if np.array(band).mean() != 0.0:
-            bands_list_valid.append(np.stack(band, axis=2).reshape(-1, len(band)))
-            timestamps_valid.append(datetime.strptime(re.split('[_.]', filename)[-2],
-                                                    '%Y%m%dT%H%M%S%f').date())
-        else:
-            timestamps_missing.append(datetime.strptime(re.split('[_.]', filename)[-2],
-                                                    '%Y%m%dT%H%M%S%f').date())
-            print(f'\tDiscard {filename} due to empty value.')
-    print('Done!')
-    return bands_list_valid, timestamps_valid, timestamps_missing, meta
-
-
-def stack_all_timestamps(from_dir, way='weekly', interpolation='previous'):
+def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous'):
     """
     Stack all the timestamps in from_dir folder, ignoring all black images.
+
+    :param logger: std::out
     :param from_dir: string
     :param way: string
         choices = ['raw', 'weekly', 'monthly']
     :param interpolation: string
         choices = ['zero', 'previous']
-    :return: bands_array, meta, timestamps_bf, timestamps_af, timestamps_weekly
-        timestamps_bf: the raw timestamps
-    """
 
-    print(f'----- Stacking all timestamps {way} -----')
+    :return: bands_array, meta, timestamps_bf, timestamps_af, timestamps_weekly
+    bands_array: array
+        shape (pixel, number of bands, number of weeks)
+    timestamps_bf: the raw timestamps
+    """
+    logger.info(f'--- Stacking all timestamps {way} ---')
 
     # ### sanity check
     choices_sanity_check(['raw', 'weekly', 'monthly'], way, 'way')
@@ -258,7 +201,7 @@ def stack_all_timestamps(from_dir, way='weekly', interpolation='previous'):
     # find all the raw time stamps
     timestamps_bf = []
     for filename in filenames:
-        timestamps_bf.append(datetime.strptime(re.split('[_.]', filename)[-2],
+        timestamps_bf.append(datetime.datetime.strptime(re.split('[_.]', filename)[-2],
                                                '%Y%m%dT%H%M%S%f').date())
 
     # ### check the way to stack
@@ -266,11 +209,11 @@ def stack_all_timestamps(from_dir, way='weekly', interpolation='previous'):
         timestamps_af = timestamps_bf
         timestamps_ref = timestamps_bf
     elif way == 'weekly':
-        timestamps_af = [ts - timedelta(days=ts.weekday()) for ts in
+        timestamps_af = [ts - datetime.timedelta(days=ts.weekday()) for ts in
                          timestamps_bf]  # datetime.weekday() returns 0~6
         timestamps_ref = get_weekly_timestamps()
     else:
-        timestamps_af = [ts - timedelta(days=ts.day-1) for ts in timestamps_bf]  # datetime.day returns 1-31
+        timestamps_af = [ts - datetime.timedelta(days=ts.day-1) for ts in timestamps_bf]  # datetime.day returns 1-31
         timestamps_ref = get_monthly_timestamps()
 
     # ### stack all the timestamps
@@ -294,38 +237,40 @@ def stack_all_timestamps(from_dir, way='weekly', interpolation='previous'):
                     band_list.append(np.stack(band, axis=2).reshape(-1, len(band)))
                 else:
                     black_ids.append(id)
-                    print(f'\tDiscard {filename} due to empty value.')
+                    logger.info(f'  Discard {filename} due to empty value.')
         # stack by index
         if len(band_list) != 0:
             band_list = np.stack(band_list, axis=2).mean(axis=2)
             # format printing
-            print(f'[{i}/{len(timestamps_ref)}] {timestamp} (', end=" ")
+            print_str = ''
             for id in ids:
                 if id in black_ids:
-                    print(f'x{timestamps_bf[id]}', end=", ")
+                    print_str += f'x{timestamps_bf[id].strftime("%Y-%m-%d")}, '
                 else:
-                    print(timestamps_bf[id], end=", ")
-            print(')', end='\n')
+                    print_str += f'{timestamps_bf[id].strftime("%Y-%m-%d")}, '
+            logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} ({print_str})')
         else:
             # fill in all zero
             if interpolation == 'zero' or i == 1:
                 band_list = np.zeros((meta['height'] * meta['width'], meta['count']))
-                print(f'[{i}/{len(timestamps_ref)}] {timestamp} (0)')
+                logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (0)')
             # fill in the last band_list
             else:
                 band_list = bands_list[-1]
-                print(f'[{i}/{len(timestamps_ref)}] {timestamp} (last bands)')
+                logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (previous)')
         bands_list.append(band_list)
     # stack finally
     bands_array = np.stack(bands_list, axis=2)
-    print('Stack is done!')
+    logger.info('Satck done!')
 
     return bands_array, meta, timestamps_bf, timestamps_af, timestamps_ref
 
 
-def count_classes(y):
+def count_classes(logger, y):
+    tot_num = len(y)
     for i in np.unique(y):
-        print(f'Number of pixel taking {i} is {y[y==i].shape[0]}')
+        y_i = y[y == i]
+        logger.info(f'  label = {i}, pixel number = {y_i.shape[0]}, percentage = {round(len(y_i)/tot_num*100, 2)}%')
 
 
 def save_predictions_geotiff(meta_src, predictions, save_path):
@@ -342,8 +287,131 @@ def save_predictions_geotiff(meta_src, predictions, save_path):
             dst.write(predictions.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
 
 
-def feature_importance_table(feature_name, feature_importance, save_path):
+def impurity_importance_table(feature_names, feature_importance, save_path):
     df = pd.DataFrame()
-    df['feature_name'] = feature_name
+    df['feature_names'] = feature_names
     df['feature_importance'] = feature_importance
     df.sort_values(by=['feature_importance']).to_csv(save_path, index=False)
+
+
+def permutation_importance_table(model, x_val, y_val, feature_names, save_path):
+    r = permutation_importance(model, x_val, y_val, n_repeats=30, random_state=0)
+    df = pd.DataFrame()
+    for i in r.importances_mean.argsort()[::-1]:
+        df['feature_names'] = feature_names[i]
+        df['feature_importance'] = r.importances_mean[i]
+        df['feature_importance_std'] = r.importances_std[i]
+        if r.importances_mean[i] - 2 * r.importances_std[i] > 0:
+            print(f"{feature_names[i]:<8}" 
+                  f"{r.importances_mean[i]:.3f}"
+                  f" +/- {r.importances_std[i]:.3f}")
+    df.to_csv(save_path, index=False)
+
+
+def dropna_in_shapefile(from_shp_path, to_shp_path=None):
+    shapefile = gpd.read_file(from_shp_path)
+    shapefile = shapefile.dropna().reset_index(drop=True)
+    if to_shp_path is None:
+        shapefile.to_file(from_shp_path)
+    else:
+        shapefile.to_file(to_shp_path)
+
+
+"""
+=============================== labels ================================
+"""
+
+
+def load_target_shp(path, transform=None, proj_out=None):
+    """ Load the shapefile as a list of numpy array of coordinates
+        INPUT : path (str) -> the path to the shapefile
+                transform (rasterio.Affine) -> the affine transformation to get the polygon in row;col format from UTM.
+        OUTPUT : poly (list of np.array) -> list of polygons (as numpy.array of coordinates)
+                 poly_rc (list of np.array) -> list of polygon in row-col format if a transform is given
+    """
+    with fiona.open(path) as shapefile:
+        proj_in = pyproj.Proj(shapefile.crs)
+        class_type = [feature['properties']['id'] for feature in shapefile]
+        features = [feature["geometry"] for feature in shapefile]
+    # re-project polygons if necessary
+    if proj_out is None or proj_in == proj_out:
+        poly = [np.array([(coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i in
+                range(len(features))]
+        print('No re-projection!')
+    else:
+        poly = [np.array(
+            [pyproj.transform(proj_in, proj_out, coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i
+                in range(len(features))]
+        print(f'Re-project from {proj_in} to {proj_out}')
+
+    poly_rc = None
+    # transform in row-col if a transform is given
+    if transform is not None:
+        poly_rc = [np.array([rasterio.transform.rowcol(transform, coord[0], coord[1])[::-1] for coord in p]) for p in
+                   poly]
+    print('Loaded target shape files.')
+
+    return poly, poly_rc, class_type
+
+
+def compute_mask(polygon_list, meta, val_list):
+    """ Get mask of class of a polygon list
+        INPUT : polygon_list (list od polygon in coordinates (x, y)) -> the polygons in row;col format
+                meta -> the image width and height
+                val_list(list of int) -> the class associated with each polygon
+        OUTPUT : img (np.array 2D) -> the mask in which the pixel value reflect it's class (zero being the absence of class)
+    """
+    img = np.zeros((meta['height'], meta['width']), dtype=np.uint8)  # skimage : row,col --> h,w
+    for polygon, val in zip(polygon_list, val_list):
+        rr, cc = skimage.draw.polygon(polygon[:, 1], polygon[:, 0], img.shape)
+        img[rr, cc] = val
+    print("Added targets' mask.")
+    return img
+
+
+"""
+=============================== logger ================================
+"""
+
+
+def config_logging(log_dir, log_filename='info.log', level=logging.INFO):
+    # Add file handler and stdout handler
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # Create the log directory if necessary.
+    try:
+        os.makedirs(log_dir)
+    except OSError:
+        pass
+    file_handler = logging.FileHandler(os.path.join(log_dir, log_filename))
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(level=level)
+    # Add console handler.
+    console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(console_formatter)
+    console_handler.setLevel(level=level)
+    logging.basicConfig(handlers=[file_handler, console_handler], level=level)
+
+
+def get_logger(log_dir, name, log_filename='info.log', level=logging.INFO):
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    # Add file handler and stdout handler
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler = logging.FileHandler(os.path.join(log_dir, log_filename))
+    file_handler.setFormatter(formatter)
+    # Add console handler.
+    console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    # Add google cloud log handler
+    logger.info('Log directory: %s', log_dir)
+    return logger
+
+
+def get_log_dir(log_dir='../logs/'):
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    return log_dir
