@@ -17,9 +17,14 @@ def test(args):
     # logger
     logger_filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     logger = get_logger(get_log_dir(), __name__,
-                        f'{logger_filename}.log', level='INFO')
+                        f'{logger_filename}_test.log', level='INFO')
     logger.info(args)
+    logger.info('----- testing -----')
     from_dir = args.images_dir + 'clip/'
+
+    # merge all labels
+    merge_shapefiles()
+    logger.info('Merged all labels')
 
     # follow pipeline
     pipe = Pipeline(logger, from_dir)
@@ -44,7 +49,7 @@ def test(args):
 
     # ### models
     # SVM
-    logger.info("--- Random Forest ---")
+    logger.info("--- SVM ---")
     # load pretrained model
     logger.info("Loading pretrained SVM...")
     svm = pickle.load(open(f'../models/{args.pretrained_models[0]}.sav', 'rb'))
@@ -55,7 +60,7 @@ def test(args):
     logger.info('Saving SVM predictions...')
     svm_pred_name = f'../preds/{args.pretrained_models[0]}.tif'
     save_predictions_geotiff(meta, svm_preds, svm_pred_name)
-    logger.info('SVM predictions are saved to {svm_pred_name}')
+    logger.info(f'SVM predictions are saved to {svm_pred_name}')
 
     # Random forest
     logger.info("--- Random Forest ---")
@@ -69,7 +74,7 @@ def test(args):
     logger.info('Saving RFC predictions...')
     rfc_pred_name = f'../preds/{args.pretrained_models[1]}.tif'
     save_predictions_geotiff(meta, rfc_preds, rfc_pred_name)
-    logger.info('RFC predictions are saved to {rfc_pred_name}')
+    logger.info(f'RFC predictions are saved to {rfc_pred_name}')
 
 
 if __name__ == '__main__':
@@ -89,7 +94,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--pretrained_models',
         type=list,
-        default=['svm_2021-09-29-17-09-36', 'rfc_2021-09-29-17-09-36'],
+        default=['svm_2021-10-01-18-44-45', 'rfc_2021-10-01-18-44-45'],
         help='Filenames of pretrained models.'
     )
     args = parser.parse_args()

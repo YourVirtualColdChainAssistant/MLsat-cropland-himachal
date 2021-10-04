@@ -195,9 +195,9 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
 
     # ### raw files
     # sorted available files
-    filenames = sorted(os.listdir(from_dir))
+    filenames = sorted([file for file in os.listdir(from_dir) if file.endswith('tiff')])
     # get bands' meta data
-    _, meta = load_geotiff(from_dir + os.listdir(from_dir)[0])
+    _, meta = load_geotiff(from_dir + filenames[0])
     # find all the raw time stamps
     timestamps_bf = []
     for filename in filenames:
@@ -297,14 +297,18 @@ def impurity_importance_table(feature_names, feature_importance, save_path):
 def permutation_importance_table(model, x_val, y_val, feature_names, save_path):
     r = permutation_importance(model, x_val, y_val, n_repeats=30, random_state=0)
     df = pd.DataFrame()
+    features_name_list, importance_mean_list, importance_std_list = [], [], []
     for i in r.importances_mean.argsort()[::-1]:
-        df['feature_names'] = feature_names[i]
-        df['feature_importance'] = r.importances_mean[i]
-        df['feature_importance_std'] = r.importances_std[i]
+        features_name_list.append(feature_names[i])
+        importance_mean_list.append(r.importances_mean[i])
+        importance_std_list.append(r.importances_std[i])
         if r.importances_mean[i] - 2 * r.importances_std[i] > 0:
             print(f"{feature_names[i]:<8}" 
                   f"{r.importances_mean[i]:.3f}"
                   f" +/- {r.importances_std[i]:.3f}")
+    df['features_name'] = features_name_list
+    df['feature_importance'] = importance_mean_list
+    df['importance_std'] = importance_std_list
     df.to_csv(save_path, index=False)
 
 
@@ -362,9 +366,11 @@ def compute_mask(polygon_list, meta, val_list):
         OUTPUT : img (np.array 2D) -> the mask in which the pixel value reflect it's class (zero being the absence of class)
     """
     img = np.zeros((meta['height'], meta['width']), dtype=np.uint8)  # skimage : row,col --> h,w
+    i = 0
     for polygon, val in zip(polygon_list, val_list):
         rr, cc = skimage.draw.polygon(polygon[:, 1], polygon[:, 0], img.shape)
         img[rr, cc] = val
+        i += 1
     print("Added targets' mask.")
     return img
 
@@ -415,3 +421,43 @@ def get_log_dir(log_dir='../logs/'):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     return log_dir
+
+
+def merge_shapefiles(to_label_path='../data/all-labels/all-labels.shp'):
+    # read all the shape files
+    old_apples_shp = gpd.read_file('../data/apples/survey20210716_polygons20210819_corrected20210831.shp')
+    new_apples_shp = gpd.read_file('../data/apples/survey20210825_polygons20210901_revised20210929.shp')
+    non_crops_shp = gpd.read_file('../data/non-crops/non-crop.shp')
+    other_crops_shp = gpd.read_file('../data/other-crops/other-crops.shp')
+    # put all shape files into one geo dataframe
+    all_labels_shp = gpd.GeoDataFrame(
+        pd.concat([old_apples_shp, new_apples_shp, other_crops_shp, non_crops_shp], axis=0))
+    all_labels_shp = all_labels_shp.dropna().reset_index(drop=True)  # delete empty polygons
+    all_labels_shp = multipolygons_to_polygons(all_labels_shp)
+    # mask for the study area
+    study_area_shp = gpd.read_file('../data/study-area/study_area.shp')
+    labels_in_study = gpd.overlay(all_labels_shp, study_area_shp, how='intersection')
+    cols2drop = [col for col in ['id', 'id_2'] if col in labels_in_study.columns]
+    labels_in_study = labels_in_study.drop(cols2drop, axis=1).rename(columns={'id_1': 'id'})
+    labels_in_study.to_file(to_label_path)  # save to folder
+
+
+def multipolygons_to_polygons(shp_file):
+    # check the number of multipolygons
+    multi_polygons_df = shp_file[shp_file['geometry'].type == 'MultiPolygon']
+    polygons_df = shp_file[shp_file['geometry'].type == 'Polygon']
+    if multi_polygons_df.shape[0] == 0:
+        print('No multi-polygons!')
+    else:
+        new_polygons = []
+        num_multi_polygons = multi_polygons_df.shape[0]
+        print(f'Converting {num_multi_polygons} multi-polygons to polygons...')
+        for i in range(num_multi_polygons):
+            multi_polygon_ = multi_polygons_df.iloc[i]
+            label, district, multi_polygon = multi_polygon_.id, multi_polygon_.district, multi_polygon_.geometry
+            for polygon in list(multi_polygon):
+                new_polygons.append([label, district, polygon])
+        new_polygons_df = pd.DataFrame(new_polygons, columns=['id', 'district', 'geometry'])
+        polygons_df = pd.concat([polygons_df, new_polygons_df], axis=0)
+    return polygons_df
+

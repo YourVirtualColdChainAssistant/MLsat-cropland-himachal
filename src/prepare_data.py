@@ -25,7 +25,6 @@ class Pipeline(object):
         # 1. feature engineering
         df = self.feature_engineering(new_bands_name=['ndvi'])
         # 2. prepare labels
-        self.merge_shapefiles()
         self.logger.info('Merged all shapefiles!')
         train_mask = self.label_preparation()
         # 3. pair features and labels
@@ -69,21 +68,3 @@ class Pipeline(object):
         train_mask = compute_mask(train_rc_polygons, self.meta, train_class_list)
         self.logger.info(' Done!')
         return train_mask
-
-    @staticmethod
-    def merge_shapefiles(to_label_path='../data/all-labels/all-labels.shp'):
-        # read all the shape files
-        old_apples_shp = gpd.read_file('../data/apples/survey20210716_polygons20210819_corrected20210831.shp')
-        new_apples_shp = gpd.read_file('../data/apples/survey20210825_polygons20210901_revised20210927.shp')
-        non_crops_shp = gpd.read_file('../data/non-crops/non-crop.shp')
-        other_crops_shp = gpd.read_file('../data/other-crops/other-crops.shp')
-        # put all shape files into one geo dataframe
-        all_labels_shp = gpd.GeoDataFrame(
-            pd.concat([old_apples_shp, new_apples_shp, other_crops_shp, non_crops_shp], axis=0))
-        all_labels_shp = all_labels_shp.dropna().reset_index(drop=True)  # delete empty polygons
-        # mask for the study area
-        study_area_shp = gpd.read_file('../data/study-area/study_area.shp')
-        labels_in_study = gpd.overlay(all_labels_shp, study_area_shp, how='intersection')
-        cols2drop = [col for col in ['id', 'id_2'] if col in labels_in_study.columns]
-        labels_in_study = labels_in_study.drop(cols2drop, axis=1).rename(columns={'id_1': 'id'})
-        labels_in_study.to_file(to_label_path)  # save to folder

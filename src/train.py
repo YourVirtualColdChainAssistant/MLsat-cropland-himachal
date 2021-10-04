@@ -8,7 +8,7 @@ from sklearn.metrics import classification_report
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from util import *
-from util import get_log_dir, get_logger
+from util import get_log_dir, get_logger, merge_shapefiles
 from visualization import NVDI_profile
 from prepare_data import Pipeline
 
@@ -17,9 +17,14 @@ def train(args):
     # logger
     logger_filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     logger = get_logger(get_log_dir(), __name__,
-                        f'{logger_filename}.log', level='INFO')
+                        f'{logger_filename}_train.log', level='INFO')
     logger.info(args)
+    logger.info('----- training -----')
     from_dir = args.images_dir + 'clip/'
+
+    # merge all labels
+    merge_shapefiles()
+    logger.info('Merged all labels')
 
     # check NDVI profile
     ndvi_profile = NVDI_profile(logger, from_dir, '../data/all-labels/all-labels.shp')
@@ -84,7 +89,7 @@ def train(args):
     logger.info(f"\n{classification_report(y_val, y_val_pred_rfc, target_names=['crops', 'non-crops'])}")
     # save model
     rfc_model = f'../models/rfc_{logger_filename}.sav'
-    pickle.dump(svm, open(rfc_model, 'wb'))
+    pickle.dump(rfc, open(rfc_model, 'wb'))
     logger.info(f'  Saved pre-trained RFC to {rfc_model}')
     # feature importance - II
     rfc_II = f'../preds/rfc_II_{logger_filename}.csv'
@@ -92,7 +97,7 @@ def train(args):
     logger.info(f'  Saved impurity importance to {rfc_II}')
     # feature importance - PI
     rfc_PI = f'../preds/rfc_PI_{logger_filename}.csv'
-    permutation_importance_table(svm, x_val, y_val, feature_names, f'{rfc_PI}')
+    permutation_importance_table(rfc, x_val, y_val, feature_names, f'{rfc_PI}')
     logger.info(f'  Saved permutation importance to {rfc_PI}')
 
 

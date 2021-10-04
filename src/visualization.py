@@ -195,6 +195,7 @@ class NVDI_profile(object):
         self.labels = train_mask.reshape(-1)
 
     def raw_profile(self):
+        # TODO: debug, each color has three lines
         self.logger.info('Plotting raw NDVI profile...')
         plot_ndvi_profile(self.ndvi_array_raw, self.labels, self.timestamps_raw,
                           title='NDVI raw profile', save_path='../figs/NDVI_raw.png')
@@ -224,7 +225,7 @@ class NVDI_profile(object):
     def stack_valid_raw_timestamps(logger, from_dir):
         logger.info('Stacking valid raw timestamps...')
         bands_list_valid, timestamps_valid, timestamps_missing = [], [], []
-        for filename in sorted(os.listdir(from_dir)):
+        for filename in sorted([f for f in os.listdir(from_dir) if f.endswith('tiff')]):
             raster_filepath = from_dir + filename
             band, meta = load_geotiff(raster_filepath)
             # pixel values check
