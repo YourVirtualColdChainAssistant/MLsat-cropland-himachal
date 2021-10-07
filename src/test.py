@@ -15,7 +15,7 @@ from prepare_data import Pipeline
 
 def test(args):
     # logger
-    logger_filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    logger_filename = datetime.datetime.now().strftime("%m%d-%H%M%S")
     logger = get_logger(get_log_dir(), __name__,
                         f'{logger_filename}_test.log', level='INFO')
     logger.info(args)
@@ -65,7 +65,7 @@ def test(args):
     # Random forest
     logger.info("--- Random Forest ---")
     # load pretraind model
-    logger.info("Loading pretrained RF...")
+    logger.info("Loading pretrained RFC...")
     rfc = pickle.load(open(f'../models/{args.pretrained_models[1]}.sav', 'rb'))
     # predict
     logger.info('Predicting...')

@@ -261,7 +261,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
         bands_list.append(band_list)
     # stack finally
     bands_array = np.stack(bands_list, axis=2)
-    logger.info('Satck done!')
+    logger.info('Stack done!')
 
     return bands_array, meta, timestamps_bf, timestamps_af, timestamps_ref
 
@@ -333,6 +333,7 @@ def load_target_shp(path, transform=None, proj_out=None):
         OUTPUT : poly (list of np.array) -> list of polygons (as numpy.array of coordinates)
                  poly_rc (list of np.array) -> list of polygon in row-col format if a transform is given
     """
+    print("Loading target shapefile...")
     with fiona.open(path) as shapefile:
         proj_in = pyproj.Proj(shapefile.crs)
         class_type = [feature['properties']['id'] for feature in shapefile]
@@ -365,7 +366,7 @@ def compute_mask(polygon_list, meta, val_list):
                 val_list(list of int) -> the class associated with each polygon
         OUTPUT : img (np.array 2D) -> the mask in which the pixel value reflect it's class (zero being the absence of class)
     """
-    img = np.zeros((meta['height'], meta['width']), dtype=np.uint8)  # skimage : row,col --> h,w
+    img = np.zeros((meta['height'], meta['width']), dtype=np.int8)  # skimage : row,col --> h,w
     i = 0
     for polygon, val in zip(polygon_list, val_list):
         rr, cc = skimage.draw.polygon(polygon[:, 1], polygon[:, 0], img.shape)

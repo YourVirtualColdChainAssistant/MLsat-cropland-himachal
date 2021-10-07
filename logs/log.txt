@@ -1,0 +1,21 @@
+== 
+	train svm and rfc 
+	+ now balanced data
+	+ 3-fold cv
+	+ smoothed NDVI profile
+	+ fix the feature importance saving error
+
+== 1003-214727_test.log
+	test svm and rfc with pretrained 1001-184445_train
+
+== 1001-184445_train.log
+	train svm and rfc
+	- error of feature importance saving to csv file
+	- data imbalance
+
+== 0930-133541_test.log
+	test svm with pretrained 0929-170936_train 
+
+== 0929-170936_train.log 
+	train svm
+	- error saving rfc

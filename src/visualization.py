@@ -158,14 +158,18 @@ def plot_ndvi_profile(ndvi_array, train_mask, timestamps_ref, title=None, save_p
     """
     _ = plt.subplots(1, 1, figsize=(10, 7))
     labels = np.unique(train_mask)
-    colors_map = {0: 'black', 1: 'tab:red', 2: 'tab:green', 3: 'tab:brown'}
-    labels_map = {0: 'no labels', 1: 'apples', 2: 'other crops', 3: 'non crops'}
+    print(f"labels = {labels}")
+    colors_map = {0: 'black', 1: 'tab:red', 2: 'tab:green', -1: 'tab:brown'}
+    labels_map = {0: 'no labels', 1: 'apples', 2: 'other crops', -1: 'non crops'}
+    mean_df = pd.DataFrame()
     for label in labels:
-        if label != 3:
-            mean = ndvi_array[train_mask == label].mean(axis=0)
-            std = ndvi_array[train_mask == label].std(axis=0)
-            plt.plot(timestamps_ref, mean, color=colors_map[label], label=labels_map[label])
-            plt.fill_between(timestamps_ref, mean - std, mean + std, color=colors_map[label], alpha=0.2)
+        mean = ndvi_array[train_mask == label].mean(axis=0)
+        std = ndvi_array[train_mask == label].std(axis=0)
+        plt.plot(timestamps_ref, mean, color=colors_map[label], label=labels_map[label])
+        plt.fill_between(timestamps_ref, mean - std, mean + std, color=colors_map[label], alpha=0.2)
+        mean_df['mean_'+str(label)] = mean
+        mean_df['std_' + str(label)] = std
+    mean_df.to_csv(f'../data/{title}.csv', index=False)
     plt.legend(loc='best')
     plt.xlabel('Time')
     plt.ylabel('NDVI')
@@ -186,7 +190,6 @@ class NVDI_profile(object):
         self.logger.info('--- NDVI profile ---')
         self.ndvi_array_raw, self.timestamps_raw, self.meta = \
             self.stack_valid_raw_ndvi(from_dir)
-        self.colors_map = {0: 'black', 1: 'red', 2: 'green', 3: 'blue'}
         # get labels
         _, train_rc_polygons, train_class_list = \
             load_target_shp(label_shp, transform=self.meta['transform'],
