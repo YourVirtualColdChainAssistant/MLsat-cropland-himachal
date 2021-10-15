@@ -22,10 +22,6 @@ def test(args):
     logger.info('----- testing -----')
     from_dir = args.images_dir + 'clip/'
 
-    # merge all labels
-    merge_shapefiles()
-    logger.info('Merged all labels')
-
     # follow pipeline
     pipe = Pipeline(logger, from_dir)
     meta = pipe.meta
@@ -63,7 +59,7 @@ def test(args):
     logger.info(f'SVM predictions are saved to {svm_pred_name}')
 
     # Random forest
-    logger.info("--- Random Forest ---")
+    logger.info("--- RFC ---")
     # load pretraind model
     logger.info("Loading pretrained RFC...")
     rfc = pickle.load(open(f'../models/{args.pretrained_models[1]}.sav', 'rb'))
@@ -94,7 +90,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--pretrained_models',
         type=list,
-        default=['svm_2021-10-01-18-44-45', 'rfc_2021-10-01-18-44-45'],
+        default=['1007-153151_svm', '1008-183014_rfc'],
         help='Filenames of pretrained models.'
     )
     args = parser.parse_args()

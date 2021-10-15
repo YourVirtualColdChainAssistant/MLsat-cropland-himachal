@@ -19,13 +19,12 @@ class Pipeline(object):
         :return:
         """
         # timestamps visualization
-        plot_timestamps(self.timestamps_raw, '../figs/timestamps_raw.png')
-        plot_timestamps(self.timestamps_weekly_ref, '../figs/timestamps_weekly.png')
+        # plot_timestamps(self.timestamps_raw, '../figs/timestamps_raw.png')
+        # plot_timestamps(self.timestamps_weekly_ref, '../figs/timestamps_weekly.png')
 
         # 1. feature engineering
         df = self.feature_engineering(new_bands_name=['ndvi'])
         # 2. prepare labels
-        self.logger.info('Merged all shapefiles!')
         train_mask = self.label_preparation()
         # 3. pair features and labels
         df['label'] = train_mask.reshape(-1)

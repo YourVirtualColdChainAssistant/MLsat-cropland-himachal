@@ -1,0 +1,442 @@
+C:\Users\lida\Anaconda3\envs\ch\python.exe "K:/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/ML4Satellite/src/train.py"
+ERROR 1: Can't load requested DLL: C:\Program Files\GDAL\gdalplugins\gdal_KEA.dll
+127: The specified procedure could not be found.
+
+ERROR 1: Can't load requested DLL: C:\Program Files\GDAL\gdalplugins\gdal_KEA.dll
+127: The specified procedure could not be found.
+
+Can't load requested DLL: C:\Program Files\GDAL\gdalplugins\gdal_KEA.dll
+127: The specified procedure could not be found.
+
+Can't load requested DLL: C:\Program Files\GDAL\gdalplugins\gdal_KEA.dll
+127: The specified procedure could not be found.
+
+Can't load requested DLL: C:\Program Files\GDAL\gdalplugins\gdal_KEA.dll
+127: The specified procedure could not be found.
+
+Can't load requested DLL: C:\Program Files\GDAL\gdalplugins\gdal_KEA.dll
+127: The specified procedure could not be found.
+
+2021-10-08 18:30:14,329 - INFO - Log directory: ../logs/
+2021-10-08 18:30:14,344 - INFO - Namespace(images_dir='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/', binary_classifier=True)
+2021-10-08 18:30:14,360 - INFO - ----- training -----
+Converting 1 multi-polygons to polygons...
+2021-10-08 18:30:20,300 - INFO - Merged all labels
+2021-10-08 18:30:20,322 - INFO - --- Stacking all timestamps weekly ---
+2021-10-08 18:30:43,639 - INFO -   [1/53] 2019-12-30 (2020-01-03, 2020-01-05, )
+2021-10-08 18:31:05,924 - INFO -   [2/53] 2020-01-06 (2020-01-10, 2020-01-08, )
+2021-10-08 18:31:18,173 - INFO -   Discard L2A_T43SFR_A014903_20200113T054638.tiff due to empty value.
+2021-10-08 18:31:43,860 - INFO -   [3/53] 2020-01-13 (x2020-01-13, 2020-01-15, 2020-01-18, )
+2021-10-08 18:32:19,202 - INFO -   [4/53] 2020-01-20 (2020-01-20, 2020-01-23, 2020-01-25, )
+2021-10-08 18:32:43,266 - INFO -   [5/53] 2020-01-27 (2020-02-02, 2020-01-28, )
+2021-10-08 18:33:19,766 - INFO -   [6/53] 2020-02-03 (2020-02-09, 2020-02-04, 2020-02-07, )
+2021-10-08 18:33:44,724 - INFO -   [7/53] 2020-02-10 (2020-02-12, 2020-02-14, )
+2021-10-08 18:34:21,010 - INFO -   [8/53] 2020-02-17 (2020-02-19, 2020-02-22, 2020-02-17, )
+2021-10-08 18:34:58,438 - INFO -   Discard L2A_T43SFR_A024455_20200227T054840.tiff due to empty value.
+2021-10-08 18:34:59,008 - INFO -   [9/53] 2020-02-24 (2020-02-24, 2020-02-24, x2020-02-27, )
+2021-10-08 18:35:23,871 - INFO -   [10/53] 2020-03-02 (2020-03-03, 2020-03-05, )
+2021-10-08 18:36:06,386 - INFO -   [11/53] 2020-03-09 (2020-03-10, 2020-03-13, 2020-03-15, )
+2021-10-08 18:36:30,138 - INFO -   [12/53] 2020-03-16 (2020-03-20, 2020-03-18, )
+2021-10-08 18:37:14,824 - INFO -   Discard L2A_T43SFR_A024884_20200328T054415.tiff due to empty value.
+2021-10-08 18:37:15,388 - INFO -   [13/53] 2020-03-23 (2020-03-23, 2020-03-25, x2020-03-28, )
+2021-10-08 18:37:52,827 - INFO -   [14/53] 2020-03-30 (2020-03-30, 2020-04-02, 2020-04-04, )
+2021-10-08 18:38:15,729 - INFO -   Discard L2A_T43SFR_A016190_20200412T054657.tiff due to empty value.
+2021-10-08 18:38:26,337 - INFO -   Discard L2A_T43SFR_A025027_20200407T054439.tiff due to empty value.
+2021-10-08 18:38:26,576 - INFO -   [15/53] 2020-04-06 (2020-04-09, x2020-04-12, x2020-04-07, )
+2021-10-08 18:38:58,413 - INFO -   Discard L2A_T43SFR_A025170_20200417T054716.tiff due to empty value.
+2021-10-08 18:38:58,984 - INFO -   [16/53] 2020-04-13 (2020-04-19, 2020-04-14, x2020-04-17, )
+2021-10-08 18:39:20,608 - INFO -   [17/53] 2020-04-20 (2020-04-22, 2020-04-24, )
+2021-10-08 18:39:47,338 - INFO -   [18/53] 2020-04-27 (2020-04-29, 2020-05-02, )
+2021-10-08 18:40:22,639 - INFO -   Discard L2A_T43SFR_A025456_20200507T054503.tiff due to empty value.
+2021-10-08 18:40:23,287 - INFO -   [19/53] 2020-05-04 (2020-05-09, 2020-05-04, x2020-05-07, )
+2021-10-08 18:40:45,966 - INFO -   [20/53] 2020-05-11 (2020-05-12, 2020-05-14, )
+2021-10-08 18:41:08,631 - INFO -   [21/53] 2020-05-18 (2020-05-22, 2020-05-24, )
+2021-10-08 18:41:33,098 - INFO -   Discard L2A_T43SFR_A025742_20200527T054432.tiff due to empty value.
+2021-10-08 18:41:33,367 - INFO -   [22/53] 2020-05-25 (2020-05-29, x2020-05-27, )
+2021-10-08 18:42:07,664 - INFO -   Discard L2A_T43SFR_A025885_20200606T054448.tiff due to empty value.
+2021-10-08 18:42:08,234 - INFO -   [23/53] 2020-06-01 (2020-06-01, 2020-06-03, x2020-06-06, )
+2021-10-08 18:42:32,351 - INFO -   [24/53] 2020-06-08 (2020-06-11, 2020-06-13, )
+2021-10-08 18:42:52,513 - INFO -   Discard L2A_T43SFR_A017191_20200621T053919.tiff due to empty value.
+2021-10-08 18:42:52,751 - INFO -   [25/53] 2020-06-15 (2020-06-18, x2020-06-21, )
+2021-10-08 18:43:28,232 - INFO -   Discard L2A_T43SFR_A026171_20200626T054512.tiff due to empty value.
+2021-10-08 18:43:28,796 - INFO -   [26/53] 2020-06-22 (2020-06-28, 2020-06-23, x2020-06-26, )
+2021-10-08 18:43:49,065 - INFO -   [27/53] 2020-06-29 (2020-07-01, 2020-07-03, )
+2021-10-08 18:44:10,975 - INFO -   [28/53] 2020-07-06 (2020-07-08, 2020-07-11, )
+2021-10-08 18:44:43,187 - INFO -   Discard L2A_T43SFR_A026457_20200716T054714.tiff due to empty value.
+2021-10-08 18:44:43,766 - INFO -   [29/53] 2020-07-13 (2020-07-18, 2020-07-13, x2020-07-16, )
+2021-10-08 18:44:54,706 - INFO -   Discard L2A_T43SFR_A017620_20200721T054903.tiff due to empty value.
+2021-10-08 18:45:16,248 - INFO -   Discard L2A_T43SFR_A026600_20200726T054429.tiff due to empty value.
+2021-10-08 18:45:16,480 - INFO -   [30/53] 2020-07-20 (x2020-07-21, 2020-07-23, x2020-07-26, )
+2021-10-08 18:45:38,882 - INFO -   [31/53] 2020-07-27 (2020-07-28, 2020-08-02, )
+2021-10-08 18:46:00,980 - INFO -   Discard L2A_T43SFR_A026743_20200805T054056.tiff due to empty value.
+2021-10-08 18:46:01,234 - INFO -   [32/53] 2020-08-03 (2020-08-07, x2020-08-05, )
+2021-10-08 18:46:12,805 - INFO -   Discard L2A_T43SFR_A017906_20200810T054311.tiff due to empty value.
+2021-10-08 18:46:33,921 - INFO -   Discard L2A_T43SFR_A026886_20200815T054052.tiff due to empty value.
+2021-10-08 18:46:34,152 - INFO -   [33/53] 2020-08-10 (x2020-08-10, 2020-08-12, x2020-08-15, )
+2021-10-08 18:46:58,642 - INFO -   Discard L2A_T43SFR_A018049_20200820T054930.tiff due to empty value.
+2021-10-08 18:47:09,397 - INFO -   [34/53] 2020-08-17 (2020-08-17, x2020-08-20, 2020-08-22, )
+2021-10-08 18:47:20,890 - INFO -   Discard L2A_T43SFR_A027029_20200825T054859.tiff due to empty value.
+2021-10-08 18:47:20,906 - INFO -   [35/53] 2020-08-24 (previous)
+2021-10-08 18:47:53,682 - INFO -   Discard L2A_T43SFR_A027172_20200904T053646.tiff due to empty value.
+2021-10-08 18:47:54,237 - INFO -   [36/53] 2020-08-31 (2020-09-06, 2020-09-01, x2020-09-04, )
+2021-10-08 18:48:05,577 - INFO -   Discard L2A_T43SFR_A018335_20200909T054842.tiff due to empty value.
+2021-10-08 18:48:17,760 - INFO -   [37/53] 2020-09-07 (x2020-09-09, 2020-09-11, )
+2021-10-08 18:48:42,106 - INFO -   Discard L2A_T43SFR_A018478_20200919T054117.tiff due to empty value.
+2021-10-08 18:48:51,931 - INFO -   Discard L2A_T43SFR_A027315_20200914T053646.tiff due to empty value.
+2021-10-08 18:48:52,194 - INFO -   [38/53] 2020-09-14 (2020-09-16, x2020-09-19, x2020-09-14, )
+2021-10-08 18:49:15,483 - INFO -   Discard L2A_T43SFR_A027458_20200924T054816.tiff due to empty value.
+2021-10-08 18:49:15,715 - INFO -   [39/53] 2020-09-21 (2020-09-21, x2020-09-24, )
+2021-10-08 18:49:27,373 - INFO -   Discard L2A_T43SFR_A018621_20200929T053915.tiff due to empty value.
+2021-10-08 18:49:50,454 - INFO -   Discard L2A_T43SFR_A027601_20201004T053701.tiff due to empty value.
+2021-10-08 18:49:50,677 - INFO -   [40/53] 2020-09-28 (x2020-09-29, 2020-10-01, x2020-10-04, )
+2021-10-08 18:50:14,649 - INFO -   Discard L2A_T43SFR_A018764_20201009T054103.tiff due to empty value.
+2021-10-08 18:50:25,960 - INFO -   [41/53] 2020-10-05 (2020-10-06, x2020-10-09, 2020-10-11, )
+2021-10-08 18:50:46,773 - INFO -   Discard L2A_T43SFR_A027744_20201014T053809.tiff due to empty value.
+2021-10-08 18:50:46,996 - INFO -   [42/53] 2020-10-12 (2020-10-16, x2020-10-14, )
+2021-10-08 18:50:59,128 - INFO -   Discard L2A_T43SFR_A018907_20201019T054625.tiff due to empty value.
+2021-10-08 18:51:09,283 - INFO -   Discard L2A_T43SFR_A027887_20201024T054757.tiff due to empty value.
+2021-10-08 18:51:09,299 - INFO -   [43/53] 2020-10-19 (previous)
+2021-10-08 18:51:31,986 - INFO -   Discard L2A_T43SFR_A019050_20201029T054730.tiff due to empty value.
+2021-10-08 18:51:32,218 - INFO -   [44/53] 2020-10-26 (2020-10-26, x2020-10-29, )
+2021-10-08 18:51:56,187 - INFO -   Discard L2A_T43SFR_A019193_20201108T054035.tiff due to empty value.
+2021-10-08 18:52:06,764 - INFO -   Discard L2A_T43SFR_A019193_20201108T055005.tiff due to empty value.
+2021-10-08 18:52:17,559 - INFO -   Discard L2A_T43SFR_A028030_20201103T054012.tiff due to empty value.
+2021-10-08 18:52:17,790 - INFO -   [45/53] 2020-11-02 (2020-11-05, x2020-11-08, x2020-11-08, x2020-11-03, )
+2021-10-08 18:52:52,097 - INFO -   Discard L2A_T43SFR_A028173_20201113T054102.tiff due to empty value.
+2021-10-08 18:52:52,652 - INFO -   [46/53] 2020-11-09 (2020-11-15, 2020-11-10, x2020-11-13, )
+2021-10-08 18:53:03,978 - INFO -   [47/53] 2020-11-16 (2020-11-20, )
+2021-10-08 18:53:35,900 - INFO -   Discard L2A_T43SFR_A028316_20201123T054143.tiff due to empty value.
+2021-10-08 18:53:36,470 - INFO -   [48/53] 2020-11-23 (2020-11-25, 2020-11-28, x2020-11-23, )
+2021-10-08 18:53:59,974 - INFO -   [49/53] 2020-11-30 (2020-12-05, 2020-12-03, )
+2021-10-08 18:54:10,384 - INFO -   Discard L2A_T43SFR_A019622_20201208T054222.tiff due to empty value.
+2021-10-08 18:54:31,170 - INFO -   [50/53] 2020-12-07 (x2020-12-08, 2020-12-10, 2020-12-13, )
+2021-10-08 18:55:03,489 - INFO -   [51/53] 2020-12-14 (2020-12-15, 2020-12-18, 2020-12-20, )
+2021-10-08 18:55:26,209 - INFO -   [52/53] 2020-12-21 (2020-12-25, 2020-12-23, )
+2021-10-08 18:55:36,417 - INFO -   Discard L2A_T43SFR_A019908_20201228T054233.tiff due to empty value.
+2021-10-08 18:55:48,260 - INFO -   [53/53] 2020-12-28 (x2020-12-28, 2020-12-30, )
+2021-10-08 18:57:03,445 - INFO - Stack done!
+2021-10-08 18:57:04,956 - INFO - --- Features engineering ---
+2021-10-08 18:57:04,971 - INFO -   Adding new bands ['ndvi']...
+2021-10-08 18:57:18,880 - INFO -   ok
+2021-10-08 18:59:09,045 - INFO -   Adding raw features...
+2021-10-08 18:59:15,630 - INFO -   ok, 70 new features are added.
+2021-10-08 19:00:02,501 - INFO -   Adding statistics...
+2021-10-08 19:00:51,229 - INFO -   ok, 15 new features are added.
+2021-10-08 19:00:52,429 - INFO -   Adding difference...
+2021-10-08 19:01:07,438 - INFO -   ok, 52 new features are added.
+2021-10-08 19:01:42,594 - INFO - Done! df.shape=(4459444, 137)
+2021-10-08 19:01:43,375 - INFO - Merged all shapefiles!
+2021-10-08 19:01:43,393 - INFO - --- Load target shape files ---
+Loading target shapefile...
+C:\Users\lida\Anaconda3\envs\ch\lib\site-packages\pyproj\crs\crs.py:131: FutureWarning: '+init=<authority>:<code>' syntax is deprecated. '<authority>:<code>' is the preferred initialization method. When making the change, be mindful of axis order changes: https://pyproj4.github.io/pyproj/stable/gotchas.html#axis-order-changes-in-proj-6
+  in_crs_string = _prepare_from_proj_string(in_crs_string)
+No re-projection!
+Loaded target shape files.
+Added targets' mask.
+2021-10-08 19:01:44,975 - INFO -  Done!
+2021-10-08 19:01:59,379 - INFO - --- Print data summary ---
+2021-10-08 19:01:59,410 - INFO - With 3 classes:
+2021-10-08 19:01:59,442 - INFO -   label = -1, pixel number = 43762, percentage = 55.19%
+2021-10-08 19:01:59,448 - INFO -   label = 1, pixel number = 6021, percentage = 7.59%
+2021-10-08 19:01:59,464 - INFO -   label = 2, pixel number = 29514, percentage = 37.22%
+2021-10-08 19:01:59,480 - INFO - With 2 classes:
+2021-10-08 19:01:59,495 - INFO -   label = -1, pixel number = 43762, percentage = 55.19%
+2021-10-08 19:01:59,511 - INFO -   label = 1, pixel number = 35535, percentage = 44.81%
+2021-10-08 19:01:59,796 - INFO - 
+Features: Index(['blue_1', 'green_1', 'red_1', 'nir_1', 'ndvi_1', 'blue_5', 'green_5',
+       'red_5', 'nir_5', 'ndvi_5',
+       ...
+       'ndvi_diff_43', 'ndvi_diff_44', 'ndvi_diff_45', 'ndvi_diff_46',
+       'ndvi_diff_47', 'ndvi_diff_48', 'ndvi_diff_49', 'ndvi_diff_50',
+       'ndvi_diff_51', 'ndvi_diff_52'],
+      dtype='object', length=137)
+2021-10-08 19:01:59,812 - INFO -   x.shape (79297, 137), y.shape (79297,)
+2021-10-08 19:01:59,827 - INFO -   x_train_val.shape (63437, 137), y_train_val.shape (63437,)
+2021-10-08 19:01:59,843 - INFO -   x_test.shape (15860, 137), y_test.shape (15860,)
+2021-10-08 19:01:59,849 - INFO - --- SVM ---
+2021-10-08 19:01:59,865 - INFO - Loading pretrained SVM...
+permutation_importance... 
+permutation_importance done
+ndvi_29 0.053 +/- 0.001
+ndvi_max0.049 +/- 0.001
+ndvi_37 0.042 +/- 0.001
+ndvi_25 0.039 +/- 0.000
+ndvi_diff_220.038 +/- 0.000
+ndvi_avg0.030 +/- 0.001
+ndvi_53 0.029 +/- 0.001
+ndvi_13 0.028 +/- 0.001
+ndvi_17 0.026 +/- 0.001
+green_330.022 +/- 0.000
+nir_25  0.021 +/- 0.001
+ndvi_diff_210.012 +/- 0.001
+ndvi_33 0.011 +/- 0.001
+ndvi_49 0.010 +/- 0.001
+ndvi_21 0.010 +/- 0.001
+ndvi_45 0.008 +/- 0.000
+ndvi_41 0.007 +/- 0.001
+ndvi_9  0.006 +/- 0.000
+ndvi_diff_140.006 +/- 0.001
+nir_9   0.004 +/- 0.000
+ndvi_diff_470.003 +/- 0.000
+ndvi_1  0.003 +/- 0.001
+ndvi_diff_90.002 +/- 0.001
+ndvi_diff_300.002 +/- 0.000
+ndvi_std0.002 +/- 0.000
+blue_max0.002 +/- 0.000
+nir_max 0.002 +/- 0.000
+ndvi_diff_310.002 +/- 0.000
+green_max0.002 +/- 0.000
+red_max 0.001 +/- 0.000
+ndvi_diff_30.001 +/- 0.000
+green_290.001 +/- 0.000
+ndvi_diff_190.001 +/- 0.000
+ndvi_diff_150.001 +/- 0.000
+ndvi_diff_110.001 +/- 0.000
+nir_53  0.001 +/- 0.000
+ndvi_diff_460.001 +/- 0.000
+blue_33 0.001 +/- 0.000
+ndvi_diff_230.001 +/- 0.000
+ndvi_diff_20.001 +/- 0.000
+red_53  0.000 +/- 0.000
+ndvi_diff_160.000 +/- 0.000
+nir_29  0.000 +/- 0.000
+ndvi_diff_180.000 +/- 0.000
+green_avg0.000 +/- 0.000
+ndvi_diff_520.000 +/- 0.000
+green_530.000 +/- 0.000
+blue_45 0.000 +/- 0.000
+green_410.000 +/- 0.000
+green_250.000 +/- 0.000
+blue_std0.000 +/- 0.000
+ndvi_diff_240.000 +/- 0.000
+red_std 0.000 +/- 0.000
+green_170.000 +/- 0.000
+ndvi_diff_50.000 +/- 0.000
+blue_avg0.000 +/- 0.000
+red_29  0.000 +/- 0.000
+blue_37 0.000 +/- 0.000
+red_avg 0.000 +/- 0.000
+red_17  0.000 +/- 0.000
+2021-10-08 21:53:43,418 - INFO -   Saved permutation importance to ../preds/1008-183014_svm_PI.csv
+2021-10-08 21:53:43,434 - INFO - --- RFC ---
+Fitting 3 folds for each of 54 candidates, totalling 162 fits
+[CV 3/3] END criterion=gini, max_depth=5, max_samples=0.5, n_estimators=100;, score=0.971 total time=  20.3s
+[CV 2/3] END criterion=gini, max_depth=5, max_samples=0.5, n_estimators=100;, score=0.973 total time=  20.4s
+[CV 1/3] END criterion=gini, max_depth=5, max_samples=0.5, n_estimators=100;, score=0.970 total time=  20.5s
+[CV 1/3] END criterion=gini, max_depth=5, max_samples=0.5, n_estimators=300;, score=0.970 total time= 1.0min
+[CV 2/3] END criterion=gini, max_depth=5, max_samples=0.5, n_estimators=300;, score=0.972 total time= 1.3min
+[CV 3/3] END criterion=gini, max_depth=5, max_samples=0.5, n_estimators=300;, score=0.971 total time= 1.3min
+[CV 1/3] END criterion=gini, max_depth=5, max_samples=0.8, n_estimators=100;, score=0.970 total time=  31.0s
+[CV 1/3] END criterion=gini, max_depth=5, max_samples=0.5, n_estimators=500;, score=0.970 total time= 2.0min
+[CV 2/3] END criterion=gini, max_depth=5, max_samples=0.8, n_estimators=100;, score=0.972 total time=  27.7s
+[CV 3/3] END criterion=gini, max_depth=5, max_samples=0.8, n_estimators=100;, score=0.971 total time=  28.9s
+[CV 2/3] END criterion=gini, max_depth=5, max_samples=0.5, n_estimators=500;, score=0.972 total time= 2.0min
+[CV 3/3] END criterion=gini, max_depth=5, max_samples=0.5, n_estimators=500;, score=0.971 total time= 1.8min
+[CV 1/3] END criterion=gini, max_depth=5, max_samples=0.8, n_estimators=300;, score=0.970 total time= 1.4min
+[CV 2/3] END criterion=gini, max_depth=5, max_samples=0.8, n_estimators=300;, score=0.973 total time= 1.4min
+[CV 3/3] END criterion=gini, max_depth=5, max_samples=0.8, n_estimators=300;, score=0.970 total time= 1.4min
+[CV 1/3] END criterion=gini, max_depth=5, max_samples=1, n_estimators=100;, score=0.553 total time=   1.3s
+[CV 2/3] END criterion=gini, max_depth=5, max_samples=1, n_estimators=100;, score=0.553 total time=   1.2s
+[CV 3/3] END criterion=gini, max_depth=5, max_samples=1, n_estimators=100;, score=0.553 total time=   1.3s
+[CV 1/3] END criterion=gini, max_depth=5, max_samples=1, n_estimators=300;, score=0.553 total time=   3.4s
+[CV 2/3] END criterion=gini, max_depth=5, max_samples=1, n_estimators=300;, score=0.553 total time=   3.5s
+[CV 3/3] END criterion=gini, max_depth=5, max_samples=1, n_estimators=300;, score=0.553 total time=   3.5s
+[CV 1/3] END criterion=gini, max_depth=5, max_samples=1, n_estimators=500;, score=0.553 total time=   6.1s
+[CV 2/3] END criterion=gini, max_depth=5, max_samples=1, n_estimators=500;, score=0.553 total time=   6.4s
+[CV 3/3] END criterion=gini, max_depth=5, max_samples=1, n_estimators=500;, score=0.553 total time=   6.1s
+[CV 1/3] END criterion=gini, max_depth=10, max_samples=0.5, n_estimators=100;, score=0.989 total time=  34.5s
+[CV 1/3] END criterion=gini, max_depth=5, max_samples=0.8, n_estimators=500;, score=0.970 total time= 2.3min
+[CV 2/3] END criterion=gini, max_depth=10, max_samples=0.5, n_estimators=100;, score=0.988 total time=  35.0s
+[CV 3/3] END criterion=gini, max_depth=10, max_samples=0.5, n_estimators=100;, score=0.989 total time=  35.1s
+[CV 2/3] END criterion=gini, max_depth=5, max_samples=0.8, n_estimators=500;, score=0.972 total time= 2.4min
+[CV 3/3] END criterion=gini, max_depth=5, max_samples=0.8, n_estimators=500;, score=0.971 total time= 2.4min
+[CV 1/3] END criterion=gini, max_depth=10, max_samples=0.5, n_estimators=300;, score=0.989 total time= 2.0min
+[CV 2/3] END criterion=gini, max_depth=10, max_samples=0.5, n_estimators=300;, score=0.989 total time= 2.0min
+[CV 3/3] END criterion=gini, max_depth=10, max_samples=0.5, n_estimators=300;, score=0.989 total time= 2.0min
+[CV 1/3] END criterion=gini, max_depth=10, max_samples=0.8, n_estimators=100;, score=0.990 total time=  48.5s
+[CV 1/3] END criterion=gini, max_depth=10, max_samples=0.5, n_estimators=500;, score=0.990 total time= 3.1min
+[CV 2/3] END criterion=gini, max_depth=10, max_samples=0.8, n_estimators=100;, score=0.990 total time=  48.2s
+[CV 3/3] END criterion=gini, max_depth=10, max_samples=0.8, n_estimators=100;, score=0.989 total time=  48.1s
+[CV 2/3] END criterion=gini, max_depth=10, max_samples=0.5, n_estimators=500;, score=0.989 total time= 2.9min
+[CV 3/3] END criterion=gini, max_depth=10, max_samples=0.5, n_estimators=500;, score=0.990 total time= 2.9min
+[CV 1/3] END criterion=gini, max_depth=10, max_samples=0.8, n_estimators=300;, score=0.990 total time= 2.6min
+[CV 2/3] END criterion=gini, max_depth=10, max_samples=0.8, n_estimators=300;, score=0.990 total time= 2.7min
+[CV 3/3] END criterion=gini, max_depth=10, max_samples=0.8, n_estimators=300;, score=0.990 total time= 2.7min
+[CV 1/3] END criterion=gini, max_depth=10, max_samples=1, n_estimators=100;, score=0.553 total time=   1.3s
+[CV 2/3] END criterion=gini, max_depth=10, max_samples=1, n_estimators=100;, score=0.447 total time=   1.3s
+[CV 3/3] END criterion=gini, max_depth=10, max_samples=1, n_estimators=100;, score=0.553 total time=   1.6s
+[CV 1/3] END criterion=gini, max_depth=10, max_samples=1, n_estimators=300;, score=0.553 total time=   3.6s
+[CV 2/3] END criterion=gini, max_depth=10, max_samples=1, n_estimators=300;, score=0.553 total time=   3.4s
+[CV 3/3] END criterion=gini, max_depth=10, max_samples=1, n_estimators=300;, score=0.553 total time=   3.5s
+[CV 1/3] END criterion=gini, max_depth=10, max_samples=1, n_estimators=500;, score=0.553 total time=   5.8s
+[CV 2/3] END criterion=gini, max_depth=10, max_samples=1, n_estimators=500;, score=0.553 total time=   6.1s
+[CV 3/3] END criterion=gini, max_depth=10, max_samples=1, n_estimators=500;, score=0.553 total time=   5.8s
+[CV 1/3] END criterion=gini, max_depth=15, max_samples=0.5, n_estimators=100;, score=0.993 total time=  42.9s
+[CV 1/3] END criterion=gini, max_depth=10, max_samples=0.8, n_estimators=500;, score=0.990 total time= 4.3min
+[CV 2/3] END criterion=gini, max_depth=15, max_samples=0.5, n_estimators=100;, score=0.993 total time=  42.0s
+[CV 3/3] END criterion=gini, max_depth=15, max_samples=0.5, n_estimators=100;, score=0.993 total time=  42.5s
+[CV 2/3] END criterion=gini, max_depth=10, max_samples=0.8, n_estimators=500;, score=0.990 total time= 4.2min
+[CV 3/3] END criterion=gini, max_depth=10, max_samples=0.8, n_estimators=500;, score=0.989 total time= 4.1min
+[CV 1/3] END criterion=gini, max_depth=15, max_samples=0.5, n_estimators=300;, score=0.993 total time= 2.3min
+[CV 2/3] END criterion=gini, max_depth=15, max_samples=0.5, n_estimators=300;, score=0.994 total time= 2.4min
+[CV 3/3] END criterion=gini, max_depth=15, max_samples=0.5, n_estimators=300;, score=0.994 total time= 2.4min
+[CV 1/3] END criterion=gini, max_depth=15, max_samples=0.8, n_estimators=100;, score=0.994 total time=  59.6s
+[CV 1/3] END criterion=gini, max_depth=15, max_samples=0.5, n_estimators=500;, score=0.993 total time= 3.8min
+[CV 2/3] END criterion=gini, max_depth=15, max_samples=0.8, n_estimators=100;, score=0.994 total time= 1.0min
+[CV 2/3] END criterion=gini, max_depth=15, max_samples=0.5, n_estimators=500;, score=0.994 total time= 3.7min
+[CV 3/3] END criterion=gini, max_depth=15, max_samples=0.8, n_estimators=100;, score=0.994 total time= 1.0min
+[CV 3/3] END criterion=gini, max_depth=15, max_samples=0.5, n_estimators=500;, score=0.994 total time= 3.5min
+[CV 1/3] END criterion=gini, max_depth=15, max_samples=0.8, n_estimators=300;, score=0.994 total time= 3.3min
+[CV 2/3] END criterion=gini, max_depth=15, max_samples=0.8, n_estimators=300;, score=0.994 total time= 3.3min
+[CV 3/3] END criterion=gini, max_depth=15, max_samples=0.8, n_estimators=300;, score=0.995 total time= 3.3min
+[CV 1/3] END criterion=gini, max_depth=15, max_samples=1, n_estimators=100;, score=0.553 total time=   1.2s
+[CV 2/3] END criterion=gini, max_depth=15, max_samples=1, n_estimators=100;, score=0.553 total time=   1.2s
+[CV 3/3] END criterion=gini, max_depth=15, max_samples=1, n_estimators=100;, score=0.553 total time=   1.2s
+[CV 1/3] END criterion=gini, max_depth=15, max_samples=1, n_estimators=300;, score=0.553 total time=   3.8s
+[CV 2/3] END criterion=gini, max_depth=15, max_samples=1, n_estimators=300;, score=0.553 total time=   3.6s
+[CV 3/3] END criterion=gini, max_depth=15, max_samples=1, n_estimators=300;, score=0.553 total time=   3.5s
+[CV 1/3] END criterion=gini, max_depth=15, max_samples=1, n_estimators=500;, score=0.553 total time=   5.8s
+[CV 2/3] END criterion=gini, max_depth=15, max_samples=1, n_estimators=500;, score=0.553 total time=   5.9s
+[CV 3/3] END criterion=gini, max_depth=15, max_samples=1, n_estimators=500;, score=0.553 total time=   5.9s
+[CV 1/3] END criterion=entropy, max_depth=5, max_samples=0.5, n_estimators=100;, score=0.969 total time=  29.1s
+[CV 2/3] END criterion=entropy, max_depth=5, max_samples=0.5, n_estimators=100;, score=0.972 total time=  28.5s
+[CV 3/3] END criterion=entropy, max_depth=5, max_samples=0.5, n_estimators=100;, score=0.969 total time=  28.0s
+[CV 1/3] END criterion=gini, max_depth=15, max_samples=0.8, n_estimators=500;, score=0.993 total time= 5.3min
+[CV 1/3] END criterion=entropy, max_depth=5, max_samples=0.5, n_estimators=300;, score=0.969 total time= 1.4min
+[CV 2/3] END criterion=entropy, max_depth=5, max_samples=0.5, n_estimators=300;, score=0.971 total time= 1.4min
+[CV 2/3] END criterion=gini, max_depth=15, max_samples=0.8, n_estimators=500;, score=0.994 total time= 5.3min
+[CV 3/3] END criterion=gini, max_depth=15, max_samples=0.8, n_estimators=500;, score=0.995 total time= 5.4min
+[CV 3/3] END criterion=entropy, max_depth=5, max_samples=0.5, n_estimators=300;, score=0.970 total time= 1.7min
+[CV 1/3] END criterion=entropy, max_depth=5, max_samples=0.8, n_estimators=100;, score=0.967 total time=  37.6s
+[CV 1/3] END criterion=entropy, max_depth=5, max_samples=0.5, n_estimators=500;, score=0.969 total time= 2.6min
+[CV 2/3] END criterion=entropy, max_depth=5, max_samples=0.8, n_estimators=100;, score=0.971 total time=  40.9s
+[CV 3/3] END criterion=entropy, max_depth=5, max_samples=0.8, n_estimators=100;, score=0.968 total time=  39.7s
+[CV 2/3] END criterion=entropy, max_depth=5, max_samples=0.5, n_estimators=500;, score=0.971 total time= 2.4min
+[CV 3/3] END criterion=entropy, max_depth=5, max_samples=0.5, n_estimators=500;, score=0.970 total time= 2.4min
+[CV 1/3] END criterion=entropy, max_depth=5, max_samples=0.8, n_estimators=300;, score=0.968 total time= 1.9min
+[CV 2/3] END criterion=entropy, max_depth=5, max_samples=0.8, n_estimators=300;, score=0.972 total time= 2.0min
+[CV 3/3] END criterion=entropy, max_depth=5, max_samples=0.8, n_estimators=300;, score=0.969 total time= 2.0min
+[CV 1/3] END criterion=entropy, max_depth=5, max_samples=1, n_estimators=100;, score=0.553 total time=   1.2s
+[CV 2/3] END criterion=entropy, max_depth=5, max_samples=1, n_estimators=100;, score=0.553 total time=   1.2s
+[CV 3/3] END criterion=entropy, max_depth=5, max_samples=1, n_estimators=100;, score=0.553 total time=   1.2s
+[CV 1/3] END criterion=entropy, max_depth=5, max_samples=1, n_estimators=300;, score=0.553 total time=   3.4s
+[CV 2/3] END criterion=entropy, max_depth=5, max_samples=1, n_estimators=300;, score=0.553 total time=   3.4s
+[CV 3/3] END criterion=entropy, max_depth=5, max_samples=1, n_estimators=300;, score=0.553 total time=   3.8s
+[CV 1/3] END criterion=entropy, max_depth=5, max_samples=1, n_estimators=500;, score=0.553 total time=   6.8s
+[CV 2/3] END criterion=entropy, max_depth=5, max_samples=1, n_estimators=500;, score=0.553 total time=  11.2s
+[CV 3/3] END criterion=entropy, max_depth=5, max_samples=1, n_estimators=500;, score=0.553 total time=  11.6s
+[CV 1/3] END criterion=entropy, max_depth=10, max_samples=0.5, n_estimators=100;, score=0.990 total time=  47.5s
+[CV 1/3] END criterion=entropy, max_depth=5, max_samples=0.8, n_estimators=500;, score=0.968 total time= 3.5min
+[CV 2/3] END criterion=entropy, max_depth=10, max_samples=0.5, n_estimators=100;, score=0.991 total time=  44.7s
+[CV 3/3] END criterion=entropy, max_depth=10, max_samples=0.5, n_estimators=100;, score=0.990 total time=  43.9s
+[CV 2/3] END criterion=entropy, max_depth=5, max_samples=0.8, n_estimators=500;, score=0.971 total time= 3.5min
+[CV 3/3] END criterion=entropy, max_depth=5, max_samples=0.8, n_estimators=500;, score=0.969 total time= 3.5min
+[CV 1/3] END criterion=entropy, max_depth=10, max_samples=0.5, n_estimators=300;, score=0.990 total time= 2.2min
+[CV 2/3] END criterion=entropy, max_depth=10, max_samples=0.5, n_estimators=300;, score=0.991 total time= 2.2min
+[CV 3/3] END criterion=entropy, max_depth=10, max_samples=0.5, n_estimators=300;, score=0.991 total time= 2.2min
+[CV 1/3] END criterion=entropy, max_depth=10, max_samples=0.8, n_estimators=100;, score=0.991 total time= 1.3min
+[CV 1/3] END criterion=entropy, max_depth=10, max_samples=0.5, n_estimators=500;, score=0.990 total time= 3.9min
+[CV 2/3] END criterion=entropy, max_depth=10, max_samples=0.8, n_estimators=100;, score=0.991 total time= 1.0min
+[CV 3/3] END criterion=entropy, max_depth=10, max_samples=0.8, n_estimators=100;, score=0.991 total time=  59.3s
+[CV 2/3] END criterion=entropy, max_depth=10, max_samples=0.5, n_estimators=500;, score=0.991 total time= 3.9min
+[CV 3/3] END criterion=entropy, max_depth=10, max_samples=0.5, n_estimators=500;, score=0.991 total time= 3.9min
+[CV 1/3] END criterion=entropy, max_depth=10, max_samples=0.8, n_estimators=300;, score=0.991 total time= 3.0min
+[CV 2/3] END criterion=entropy, max_depth=10, max_samples=0.8, n_estimators=300;, score=0.991 total time= 3.1min
+[CV 3/3] END criterion=entropy, max_depth=10, max_samples=0.8, n_estimators=300;, score=0.992 total time= 3.0min
+[CV 1/3] END criterion=entropy, max_depth=10, max_samples=1, n_estimators=100;, score=0.447 total time=   1.2s
+[CV 2/3] END criterion=entropy, max_depth=10, max_samples=1, n_estimators=100;, score=0.553 total time=   1.2s
+[CV 3/3] END criterion=entropy, max_depth=10, max_samples=1, n_estimators=100;, score=0.553 total time=   2.3s
+[CV 1/3] END criterion=entropy, max_depth=10, max_samples=1, n_estimators=300;, score=0.553 total time=   6.9s
+[CV 2/3] END criterion=entropy, max_depth=10, max_samples=1, n_estimators=300;, score=0.553 total time=   7.2s
+[CV 3/3] END criterion=entropy, max_depth=10, max_samples=1, n_estimators=300;, score=0.553 total time=   6.9s
+[CV 1/3] END criterion=entropy, max_depth=10, max_samples=1, n_estimators=500;, score=0.553 total time=  10.6s
+[CV 2/3] END criterion=entropy, max_depth=10, max_samples=1, n_estimators=500;, score=0.553 total time=   6.3s
+[CV 3/3] END criterion=entropy, max_depth=10, max_samples=1, n_estimators=500;, score=0.553 total time=   6.0s
+[CV 1/3] END criterion=entropy, max_depth=15, max_samples=0.5, n_estimators=100;, score=0.994 total time=  48.0s
+[CV 2/3] END criterion=entropy, max_depth=15, max_samples=0.5, n_estimators=100;, score=0.995 total time=  46.9s
+[CV 1/3] END criterion=entropy, max_depth=10, max_samples=0.8, n_estimators=500;, score=0.991 total time= 5.4min
+[CV 3/3] END criterion=entropy, max_depth=15, max_samples=0.5, n_estimators=100;, score=0.994 total time=  47.2s
+[CV 2/3] END criterion=entropy, max_depth=10, max_samples=0.8, n_estimators=500;, score=0.992 total time= 5.4min
+[CV 3/3] END criterion=entropy, max_depth=10, max_samples=0.8, n_estimators=500;, score=0.991 total time= 5.4min
+[CV 1/3] END criterion=entropy, max_depth=15, max_samples=0.5, n_estimators=300;, score=0.995 total time= 2.4min
+[CV 2/3] END criterion=entropy, max_depth=15, max_samples=0.5, n_estimators=300;, score=0.995 total time= 2.5min
+[CV 3/3] END criterion=entropy, max_depth=15, max_samples=0.5, n_estimators=300;, score=0.995 total time= 2.7min
+[CV 1/3] END criterion=entropy, max_depth=15, max_samples=0.8, n_estimators=100;, score=0.996 total time= 1.1min
+[CV 2/3] END criterion=entropy, max_depth=15, max_samples=0.8, n_estimators=100;, score=0.996 total time= 1.1min
+[CV 1/3] END criterion=entropy, max_depth=15, max_samples=0.5, n_estimators=500;, score=0.995 total time= 4.2min
+[CV 2/3] END criterion=entropy, max_depth=15, max_samples=0.5, n_estimators=500;, score=0.995 total time= 4.2min
+[CV 3/3] END criterion=entropy, max_depth=15, max_samples=0.5, n_estimators=500;, score=0.995 total time= 4.2min
+[CV 3/3] END criterion=entropy, max_depth=15, max_samples=0.8, n_estimators=100;, score=0.996 total time= 1.1min
+[CV 1/3] END criterion=entropy, max_depth=15, max_samples=0.8, n_estimators=300;, score=0.996 total time= 3.6min
+[CV 2/3] END criterion=entropy, max_depth=15, max_samples=0.8, n_estimators=300;, score=0.995 total time= 3.6min
+[CV 3/3] END criterion=entropy, max_depth=15, max_samples=0.8, n_estimators=300;, score=0.996 total time= 3.6min
+[CV 1/3] END criterion=entropy, max_depth=15, max_samples=1, n_estimators=100;, score=0.553 total time=   1.2s
+[CV 2/3] END criterion=entropy, max_depth=15, max_samples=1, n_estimators=100;, score=0.553 total time=   1.3s
+[CV 3/3] END criterion=entropy, max_depth=15, max_samples=1, n_estimators=100;, score=0.553 total time=   1.2s
+[CV 1/3] END criterion=entropy, max_depth=15, max_samples=1, n_estimators=300;, score=0.553 total time=   3.5s
+[CV 2/3] END criterion=entropy, max_depth=15, max_samples=1, n_estimators=300;, score=0.553 total time=   3.4s
+[CV 3/3] END criterion=entropy, max_depth=15, max_samples=1, n_estimators=300;, score=0.553 total time=   3.6s
+[CV 1/3] END criterion=entropy, max_depth=15, max_samples=1, n_estimators=500;, score=0.553 total time=   5.6s
+[CV 2/3] END criterion=entropy, max_depth=15, max_samples=1, n_estimators=500;, score=0.553 total time=   5.5s
+[CV 3/3] END criterion=entropy, max_depth=15, max_samples=1, n_estimators=500;, score=0.553 total time=   6.1s
+[CV 1/3] END criterion=entropy, max_depth=15, max_samples=0.8, n_estimators=500;, score=0.996 total time= 5.3min
+[CV 2/3] END criterion=entropy, max_depth=15, max_samples=0.8, n_estimators=500;, score=0.996 total time= 4.5min
+[CV 3/3] END criterion=entropy, max_depth=15, max_samples=0.8, n_estimators=500;, score=0.996 total time= 4.5min
+2021-10-08 23:02:16,759 - INFO -   Saved RFC CV to ../models/1008-183014_rfc_random.sav
+2021-10-08 23:02:16,796 - INFO - Best score 1.0 with best parameters: {'criterion': 'entropy', 'max_depth': 15, 'max_samples': 0.8, 'n_estimators': 500}
+2021-10-08 23:06:56,450 - INFO - 
+              precision    recall  f1-score   support
+
+       crops       1.00      1.00      1.00      7164
+   non-crops       1.00      1.00      1.00      8696
+
+    accuracy                           1.00     15860
+   macro avg       1.00      1.00      1.00     15860
+weighted avg       1.00      1.00      1.00     15860
+
+2021-10-08 23:07:09,009 - INFO -   Saved the best pre-trained RFC to ../models/1008-183014_rfc.sav
+2021-10-08 23:07:09,325 - INFO -   Saved impurity importance to ../preds/1008-183014_rfc_II.csv
+permutation_importance... 
+permutation_importance done
+nir_17  0.001 +/- 0.000
+ndvi_13 0.001 +/- 0.000
+ndvi_diff_220.000 +/- 0.000
+red_std 0.000 +/- 0.000
+red_13  0.000 +/- 0.000
+ndvi_diff_190.000 +/- 0.000
+blue_49 0.000 +/- 0.000
+ndvi_diff_40.000 +/- 0.000
+red_45  0.000 +/- 0.000
+ndvi_diff_230.000 +/- 0.000
+ndvi_diff_350.000 +/- 0.000
+blue_max0.000 +/- 0.000
+ndvi_diff_20.000 +/- 0.000
+ndvi_diff_470.000 +/- 0.000
+ndvi_diff_330.000 +/- 0.000
+ndvi_diff_320.000 +/- 0.000
+ndvi_45 0.000 +/- 0.000
+ndvi_diff_360.000 +/- 0.000
+nir_13  0.000 +/- 0.000
+blue_std0.000 +/- 0.000
+ndvi_diff_450.000 +/- 0.000
+ndvi_diff_460.000 +/- 0.000
+nir_49  0.000 +/- 0.000
+ndvi_diff_50.000 +/- 0.000
+red_max 0.000 +/- 0.000
+ndvi_1  0.000 +/- 0.000
+ndvi_diff_480.000 +/- 0.000
+ndvi_diff_80.000 +/- 0.000
+ndvi_diff_270.000 +/- 0.000
+blue_1  0.000 +/- 0.000
+ndvi_diff_210.000 +/- 0.000
+ndvi_9  0.000 +/- 0.000
+green_max0.000 +/- 0.000
+green_1 0.000 +/- 0.000
+nir_max 0.000 +/- 0.000
+red_1   0.000 +/- 0.000
+green_210.000 +/- 0.000
+blue_37 0.000 +/- 0.000
+ndvi_21 0.000 +/- 0.000
+2021-10-08 23:22:22,296 - INFO -   Saved permutation importance to ../preds/1008-183014_rfc_PI.csv
+
+Process finished with exit code 0

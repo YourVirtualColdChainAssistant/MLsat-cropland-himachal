@@ -76,6 +76,14 @@ def is_clipped(clip_filepath):
 
 
 def clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath):
+    """
+
+    :param shape_crs: projection of source shapefile
+    :param shapes: geometry of source shapefile
+    :param geotiff_filepath: xx.tiff path
+    :param clip_filepath: output clipped path
+    :return:
+    """
     # get the coordinate system of raster
     raster = rasterio.open(geotiff_filepath)
 
@@ -295,7 +303,9 @@ def impurity_importance_table(feature_names, feature_importance, save_path):
 
 
 def permutation_importance_table(model, x_val, y_val, feature_names, save_path):
-    r = permutation_importance(model, x_val, y_val, n_repeats=30, random_state=0)
+    print('permutation_importance... ')
+    r = permutation_importance(model, x_val, y_val, random_state=0)
+    print('permutation_importance done')
     df = pd.DataFrame()
     features_name_list, importance_mean_list, importance_std_list = [], [], []
     for i in r.importances_mean.argsort()[::-1]:

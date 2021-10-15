@@ -1,4 +1,5 @@
-== 
+== 1006-185019_train.log (svm random), 1007-153151_train.log (svm best), 
+   1008-183014_train.log(svm importance; rfc random, best, and importance)
 	train svm and rfc 
 	+ now balanced data
 	+ 3-fold cv
