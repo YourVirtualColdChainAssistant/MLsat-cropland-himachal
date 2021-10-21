@@ -8,3 +8,4 @@ scikit-image
 pyproj
 matplotlib
 sklearn
+scipy
