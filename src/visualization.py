@@ -283,18 +283,33 @@ class NVDI_profile(object):
         return ndvi_array_eql, timestamps_af, timestamps_ref
 
 
-def visualize_train_test_grid_split(meta_src, grid_idx_test, grid_idx_train_val, spatial_dict, save_path):
+def visualize_train_test_grid_split(meta_src, spatial_dict, grid_idx_test, grid_idx_fold, save_path):
     # get the grid idx
     cell_size, height, width = spatial_dict['cell_size'], spatial_dict['height'], spatial_dict['width']
     grid_idx = get_grid_idx(cell_size, height, width).reshape(-1)
-    # build
-    unique_grid_idx_test = list(set(grid_idx_test))
-    unique_grid_idx_train_val = list(set(grid_idx_train_val))
     output = np.zeros_like(grid_idx)
+    # build test
+    unique_grid_idx_test = list(set(grid_idx_test))
     test_mask = [True if idx in unique_grid_idx_test else False for idx in grid_idx]
-    train_val_mask = [True if idx in unique_grid_idx_train_val else False for idx in grid_idx]
-    output[test_mask] = 1
-    output[train_val_mask] = 2
+    output[test_mask] = 5
+    # build train and val
+    if len(grid_idx_fold) == 1:
+        unique_grid_idx_train_val = list(set(grid_idx_fold[0]))
+        train_val_mask = [True if idx in unique_grid_idx_train_val else False for idx in grid_idx]
+        output[train_val_mask] = 1
+    else:
+        for i, fold in enumerate(grid_idx_fold, start=1):
+            unique_grid_idx_val = list(set(fold))
+            val_mask = [True if idx in unique_grid_idx_val else False for idx in grid_idx]
+            output[val_mask] = i
+    color_map = {
+        0: (0, 0, 0),
+        5: (138, 205, 226),  # test
+        1: (239, 135, 190),  # train (main color)
+        2: (249, 163, 203),
+        3: (252, 188, 215),
+        4: (255, 206, 230),
+    }
 
     with rasterio.Env():
         # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
@@ -306,9 +321,4 @@ def visualize_train_test_grid_split(meta_src, grid_idx_test, grid_idx_train_val,
         with rasterio.open(save_path, 'w', **out_meta) as dst:
             # reshape into (band, height, width)
             dst.write(output.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
-            dst.write_colormap(
-                1, {
-                    0: (0, 0, 0),
-                    1: (240, 72, 72),
-                    2: (71, 208, 240)}
-            )
+            dst.write_colormap(1, color_map)

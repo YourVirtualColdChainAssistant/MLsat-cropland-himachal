@@ -102,7 +102,7 @@ def train_test_split(logger, df, by, spatial_dict=None, test_ratio=0.2):
     logger.info('With 3 classes:')
     count_classes(logger, df[df['label'] != 0].label.values)
     # modify to 2 classes
-    df.loc[df.label.values == 2, 'label'] = 1
+    df.loc[df.label.values == 1, 'label'] = 2
     logger.info('With 2 classes:')
     count_classes(logger, df[df['label'] != 0].label.values)
 
@@ -123,9 +123,9 @@ def train_test_split(logger, df, by, spatial_dict=None, test_ratio=0.2):
             grid_idx = list(get_grid_idx(cell_size, height, width).reshape(-1))
             # match grid idx with df
             df['grid_idx'] = grid_idx
-            unique_grid_idx_labeled = list(df.loc[df['label'] == 1, 'grid_idx'].unique())
+            unique_grid_idx_labeled = list(df.loc[df['label'] != 0, 'grid_idx'].unique())
             unique_grid_idx_test = random.sample(unique_grid_idx_labeled,
-                                                 math.ceil(unique_grid_idx_labeled.shape[0] * test_ratio))
+                                                 math.ceil(len(unique_grid_idx_labeled) * test_ratio))
             unique_grid_idx_train_val = list(set(unique_grid_idx_labeled) - set(unique_grid_idx_test))
 
             # train, validation, test split
@@ -133,12 +133,12 @@ def train_test_split(logger, df, by, spatial_dict=None, test_ratio=0.2):
             train_val_mask = [True if idx in unique_grid_idx_train_val else False for idx in
                               df_train_val_test.grid_idx.values]
             test_mask = [True if idx in unique_grid_idx_test else False for idx in df_train_val_test.grid_idx.values]
-            x_train_val = df_train_val_test.loc[train_val_mask, :-2]
-            y_train_val = df_train_val_test.loc[train_val_mask, 'label']
-            grid_idx_train_val = df_train_val_test.loc[train_val_mask, 'grid_idx']
-            x_test = df_train_val_test.loc[test_mask, :-2]
-            y_test = df_train_val_test.loc[test_mask, 'label']
-            grid_idx_test = df_train_val_test.loc[test_mask, 'grid_idx']
+            x_train_val = df_train_val_test.iloc[train_val_mask, :-2].values
+            y_train_val = df_train_val_test.loc[train_val_mask, 'label'].values
+            grid_idx_train_val = df_train_val_test.loc[train_val_mask, 'grid_idx'].values
+            x_test = df_train_val_test.iloc[test_mask, :-2].values
+            y_test = df_train_val_test.loc[test_mask, 'label'].values
+            grid_idx_test = df_train_val_test.loc[test_mask, 'grid_idx'].values
     else:
         logger.info('Please choose from by=[random, spatial].')
         exit()
@@ -150,6 +150,7 @@ def spatial_cross_validation(x_train_val, y_train_val, grid_idx_train_val):
     # generator for the train/test indices
     data_kfold = grid_kfold.split(x_train_val, y_train_val, grid_idx_train_val)
     # create a nested list of train and test indices for each fold
-    train_indices, val_indices = [list(train_val) for train_val in zip(*grid_kfold)]
+    train_indices, val_indices = [list(train_val) for train_val in zip(*data_kfold)]
     data_cv = [*zip(train_indices, val_indices)]
-    return data_cv
+    grid_idx_fold = [grid_idx_train_val[val_indice] for val_indice in val_indices]
+    return data_cv, grid_idx_fold

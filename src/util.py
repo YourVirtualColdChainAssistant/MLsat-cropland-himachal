@@ -283,6 +283,12 @@ def count_classes(logger, y):
 
 def save_predictions_geotiff(meta_src, predictions, save_path):
     # Register GDAL format drivers and configuration options with a context manager
+    color_map = {
+        0: 'black',
+        1: 'tab:red',
+        2: 'tab:green',
+        3: 'tab:brown'
+    }
     with rasterio.Env():
         # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
         out_meta = meta_src.copy()
@@ -293,6 +299,7 @@ def save_predictions_geotiff(meta_src, predictions, save_path):
         with rasterio.open(save_path, 'w', **out_meta) as dst:
             # reshape into (band, height, width)
             dst.write(predictions.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
+            dst.write_colormap(1, color_map)
 
 
 def dropna_in_shapefile(from_shp_path, to_shp_path=None):
