@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import math
 import fiona
 import logging
 import datetime
@@ -13,7 +14,6 @@ import pyproj
 import rasterio
 from rasterio.mask import mask
 from rasterio.warp import calculate_default_transform, reproject, Resampling
-from sklearn.inspection import permutation_importance
 
 
 def load_geotiff(path, window=None):
@@ -24,7 +24,7 @@ def load_geotiff(path, window=None):
                  meta (dictionary) -> the metadata associated with the geotiff
     """
     with rasterio.open(path) as f:
-        band = [skimage.img_as_float(f.read(i+1, window=window)) for i in range(f.count)]
+        band = [skimage.img_as_float(f.read(i + 1, window=window)) for i in range(f.count)]
         meta = f.meta
         if window is not None:
             meta['height'] = window.height
@@ -137,7 +137,7 @@ def reproject_single_raster(dst_crs, input_file, transformed_file):
 
 def timestamp_sanity_check(timestamp_std, filename):
     timestamp_get = datetime.datetime.strptime(re.split('[_.]', filename)[-2],
-                                      '%Y%m%dT%H%M%S%f').date()
+                                               '%Y%m%dT%H%M%S%f').date()
     timestamp_get = timestamp_get - datetime.timedelta(days=timestamp_get.weekday())
     if timestamp_std != timestamp_get:
         print(f'{timestamp_std} and {timestamp_get} do not match!')
@@ -210,7 +210,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
     timestamps_bf = []
     for filename in filenames:
         timestamps_bf.append(datetime.datetime.strptime(re.split('[_.]', filename)[-2],
-                                               '%Y%m%dT%H%M%S%f').date())
+                                                        '%Y%m%dT%H%M%S%f').date())
 
     # ### check the way to stack
     if way == 'raw':
@@ -221,7 +221,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
                          timestamps_bf]  # datetime.weekday() returns 0~6
         timestamps_ref = get_weekly_timestamps()
     else:
-        timestamps_af = [ts - datetime.timedelta(days=ts.day-1) for ts in timestamps_bf]  # datetime.day returns 1-31
+        timestamps_af = [ts - datetime.timedelta(days=ts.day - 1) for ts in timestamps_bf]  # datetime.day returns 1-31
         timestamps_ref = get_monthly_timestamps()
 
     # ### stack all the timestamps
@@ -278,7 +278,7 @@ def count_classes(logger, y):
     tot_num = len(y)
     for i in np.unique(y):
         y_i = y[y == i]
-        logger.info(f'  label = {i}, pixel number = {y_i.shape[0]}, percentage = {round(len(y_i)/tot_num*100, 2)}%')
+        logger.info(f'  label = {i}, pixel number = {y_i.shape[0]}, percentage = {round(len(y_i) / tot_num * 100, 2)}%')
 
 
 def save_predictions_geotiff(meta_src, predictions, save_path):
@@ -293,33 +293,6 @@ def save_predictions_geotiff(meta_src, predictions, save_path):
         with rasterio.open(save_path, 'w', **out_meta) as dst:
             # reshape into (band, height, width)
             dst.write(predictions.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
-
-
-def impurity_importance_table(feature_names, feature_importance, save_path):
-    df = pd.DataFrame()
-    df['feature_names'] = feature_names
-    df['feature_importance'] = feature_importance
-    df.sort_values(by=['feature_importance']).to_csv(save_path, index=False)
-
-
-def permutation_importance_table(model, x_val, y_val, feature_names, save_path):
-    print('permutation_importance... ')
-    r = permutation_importance(model, x_val, y_val, random_state=0)
-    print('permutation_importance done')
-    df = pd.DataFrame()
-    features_name_list, importance_mean_list, importance_std_list = [], [], []
-    for i in r.importances_mean.argsort()[::-1]:
-        features_name_list.append(feature_names[i])
-        importance_mean_list.append(r.importances_mean[i])
-        importance_std_list.append(r.importances_std[i])
-        if r.importances_mean[i] - 2 * r.importances_std[i] > 0:
-            print(f"{feature_names[i]:<8}" 
-                  f"{r.importances_mean[i]:.3f}"
-                  f" +/- {r.importances_std[i]:.3f}")
-    df['features_name'] = features_name_list
-    df['feature_importance'] = importance_mean_list
-    df['importance_std'] = importance_std_list
-    df.to_csv(save_path, index=False)
 
 
 def dropna_in_shapefile(from_shp_path, to_shp_path=None):
@@ -356,7 +329,7 @@ def load_target_shp(path, transform=None, proj_out=None):
     else:
         poly = [np.array(
             [pyproj.transform(proj_in, proj_out, coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i
-                in range(len(features))]
+            in range(len(features))]
         print(f'Re-project from {proj_in} to {proj_out}')
 
     poly_rc = None
@@ -376,7 +349,7 @@ def compute_mask(polygon_list, meta, val_list):
                 val_list(list of int) -> the class associated with each polygon
         OUTPUT : img (np.array 2D) -> the mask in which the pixel value reflect it's class (zero being the absence of class)
     """
-    img = np.zeros((meta['height'], meta['width']), dtype=np.int8)  # skimage : row,col --> h,w
+    img = np.zeros((meta['height'], meta['width']), dtype=np.uint8)  # skimage : row,col --> h,w
     i = 0
     for polygon, val in zip(polygon_list, val_list):
         rr, cc = skimage.draw.polygon(polygon[:, 1], polygon[:, 0], img.shape)
@@ -472,3 +445,14 @@ def multipolygons_to_polygons(shp_file):
         polygons_df = pd.concat([polygons_df, new_polygons_df], axis=0)
     return polygons_df
 
+
+def get_grid_idx(cell_size=64, height=2357, width=1892):
+    num_h = math.ceil(height / cell_size)
+    num_w = math.ceil(width / cell_size)
+    num_range = np.arange(num_h * num_w).reshape(num_h, num_w)
+    print(f'There are {num_h * num_w} grid groups in total.')
+    grid_idx = num_range.repeat(cell_size, axis=0).repeat(cell_size, axis=1)
+    print(f'before: {grid_idx.shape}')
+    grid_idx = grid_idx[:height, :width]
+    print(f'after: {grid_idx.shape}')
+    return grid_idx

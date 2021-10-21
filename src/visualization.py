@@ -11,8 +11,8 @@ import pyproj
 import pandas as pd
 import datetime
 from feature_engineering import add_bands
-from util import get_weekly_timestamps, get_monthly_timestamps, \
-    load_target_shp, compute_mask, choices_sanity_check, load_geotiff
+from util import get_weekly_timestamps, get_monthly_timestamps, choices_sanity_check, \
+    load_geotiff, get_grid_idx, load_target_shp, compute_mask
 
 
 def normalize(array):
@@ -159,15 +159,15 @@ def plot_ndvi_profile(ndvi_array, train_mask, timestamps_ref, title=None, save_p
     _ = plt.subplots(1, 1, figsize=(10, 7))
     labels = np.unique(train_mask)
     print(f"labels = {labels}")
-    colors_map = {0: 'black', 1: 'tab:red', 2: 'tab:green', -1: 'tab:brown'}
-    labels_map = {0: 'no labels', 1: 'apples', 2: 'other crops', -1: 'non crops'}
+    colors_map = {0: 'black', 1: 'tab:red', 2: 'tab:green', 3: 'tab:brown'}
+    labels_map = {0: 'no labels', 1: 'apples', 2: 'other crops', 3: 'non crops'}
     mean_df = pd.DataFrame()
     for label in labels:
         mean = ndvi_array[train_mask == label].mean(axis=0)
         std = ndvi_array[train_mask == label].std(axis=0)
         plt.plot(timestamps_ref, mean, color=colors_map[label], label=labels_map[label])
         plt.fill_between(timestamps_ref, mean - std, mean + std, color=colors_map[label], alpha=0.2)
-        mean_df['mean_'+str(label)] = mean
+        mean_df['mean_' + str(label)] = mean
         mean_df['std_' + str(label)] = std
     mean_df.to_csv(f'../data/{title}.csv', index=False)
     plt.legend(loc='best')
@@ -185,6 +185,7 @@ class NVDI_profile(object):
     This is a class for plotting different kinds of NDVI profiles.
     When aggregating, always take the maximal value within a period.
     """
+
     def __init__(self, logger, from_dir, label_shp):
         self.logger = logger
         self.logger.info('--- NDVI profile ---')
@@ -251,7 +252,8 @@ class NVDI_profile(object):
                              self.timestamps_raw]  # datetime.weekday() returns 0~6
             timestamps_ref = get_weekly_timestamps()
         else:
-            timestamps_af = [ts - datetime.timedelta(days=ts.day - 1) for ts in self.timestamps_raw]  # datetime.day returns 1-31
+            timestamps_af = [ts - datetime.timedelta(days=ts.day - 1) for ts in
+                             self.timestamps_raw]  # datetime.day returns 1-31
             timestamps_ref = get_monthly_timestamps()
 
         # stack equidistantly
@@ -279,3 +281,34 @@ class NVDI_profile(object):
         ndvi_array_eql = np.stack(ndvi_list_eql, axis=1)
 
         return ndvi_array_eql, timestamps_af, timestamps_ref
+
+
+def visualize_train_test_grid_split(meta_src, grid_idx_test, grid_idx_train_val, spatial_dict, save_path):
+    # get the grid idx
+    cell_size, height, width = spatial_dict['cell_size'], spatial_dict['height'], spatial_dict['width']
+    grid_idx = get_grid_idx(cell_size, height, width).reshape(-1)
+    # build
+    unique_grid_idx_test = list(set(grid_idx_test))
+    unique_grid_idx_train_val = list(set(grid_idx_train_val))
+    output = np.zeros_like(grid_idx)
+    test_mask = [True if idx in unique_grid_idx_test else False for idx in grid_idx]
+    train_val_mask = [True if idx in unique_grid_idx_train_val else False for idx in grid_idx]
+    output[test_mask] = 1
+    output[train_val_mask] = 2
+
+    with rasterio.Env():
+        # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
+        out_meta = meta_src.copy()
+        out_meta.update(
+            dtype=rasterio.uint8,
+            count=1,
+            compress='lzw')
+        with rasterio.open(save_path, 'w', **out_meta) as dst:
+            # reshape into (band, height, width)
+            dst.write(output.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
+            dst.write_colormap(
+                1, {
+                    0: (0, 0, 0),
+                    1: (240, 72, 72),
+                    2: (71, 208, 240)}
+            )
