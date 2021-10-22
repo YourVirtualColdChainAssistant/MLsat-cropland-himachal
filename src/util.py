@@ -146,8 +146,7 @@ def timestamp_sanity_check(timestamp_std, filename):
 
 def choices_sanity_check(choices, choice, var_name):
     if choice not in choices:
-        print(f'{choice} is unavailable. Please choose "{var_name}" from {choices}')
-        exit()
+        raise ValueError(f'{choice} is unavailable. Please choose "{var_name}" from {choices}')
 
 
 def get_weekly_timestamps():
@@ -284,10 +283,8 @@ def count_classes(logger, y):
 def save_predictions_geotiff(meta_src, predictions, save_path):
     # Register GDAL format drivers and configuration options with a context manager
     color_map = {
-        0: 'black',
-        1: 'tab:red',
-        2: 'tab:green',
-        3: 'tab:brown'
+        2: (154, 205, 50),
+        3: (184, 134, 11)
     }
     with rasterio.Env():
         # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
@@ -463,3 +460,11 @@ def get_grid_idx(cell_size=64, height=2357, width=1892):
     grid_idx = grid_idx[:height, :width]
     print(f'after: {grid_idx.shape}')
     return grid_idx
+
+
+def correct_predictions():
+    pass
+
+
+def resample_negatives(pos, neg):
+    pass

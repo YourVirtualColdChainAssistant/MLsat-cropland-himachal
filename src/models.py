@@ -1,99 +1,136 @@
 import pickle
 from scipy.stats import uniform, loguniform, randint
-from sklearn.svm import SVC
+from sklearn.svm import SVC, OneClassSVM
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, recall_score
 from util import save_predictions_geotiff
 from evaluation import align_raster, clip_open_datasets_based_on_study_area, \
     compare_predictions_with_gfsad, compare_predictions_with_copernicus, \
     impurity_importance_table, permutation_importance_table
+from pulearn import ElkanotoPuClassifier, WeightedElkanotoPuClassifier
 
 
 class Model(object):
     def __init__(self, logger, log_time, model_name):
-        self.logger = logger
-        self.log_time = log_time
+        self._logger = logger
+        self._log_time = log_time
         self.model_name = model_name
-        model_list = ['svc', 'rfc', 'mlp', 'gru']
-        if self.model_name not in model_list:
-            self.logger.info(f'No such model {self.model_name}. Please choose from {model_list}.')
-        self.logger.info(f'===== {self.model_name.upper()} =====')
         self.best_params = None
         self.model = None
 
-    def find_best_parameters(self, x_train_val, y_train_val, by='grid', cv=4):
-        self.logger.info(f"Finding the best parameters using {by} search...")
-        if by == 'grid':
+    def _check_model_name(self, model_list):
+        if self.model_name not in model_list:
+            raise ValueError(f'No such model {self.model_name}. Please choose from {model_list}.')
+
+    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=4):
+        self._logger.info(f"Finding the best parameters using {search_by} search...")
+        if search_by == 'grid':
             model_base, model_params = self._get_model_base_and_params_list_grid()
             model_search = GridSearchCV(estimator=model_base, param_grid=model_params,
-                                        cv=cv, verbose=3, n_jobs=-1)
-        elif by == 'random':
+                                        cv=cv, scoring=scoring, verbose=3, n_jobs=-1)
+        elif search_by == 'random':
             model_base, model_params = self._get_model_base_and_params_list_random()
             model_search = RandomizedSearchCV(estimator=model_base, param_distributions=model_params,
-                                              cv=cv, verbose=3, n_jobs=-1, n_iter=1)
+                                              cv=cv, scoring=scoring, verbose=3, n_jobs=-1, n_iter=10)
         else:
-            self.logger.info(f'No {by} search. Choose from ["grid", "random"]')
-            exit()
+            raise ValueError(f'No {search_by} search. Choose from ["grid", "random"]')
 
         model_search.fit(x_train_val, y_train_val)
-        self.logger.info('  ok')
-        self.logger.info(f"\n{model_search.cv_results_}")
-        model_search_name = f'../models/{self.log_time}_{self.model_name}_{by}.sav'
+        self._logger.info('  ok')
+        self._logger.info(f"\n{model_search.cv_results_}")
+        model_search_name = f'../models/{self._log_time}_{self.model_name}_{search_by}.sav'
         pickle.dump(model_search, open(model_search_name, 'wb'))
-        self.logger.info(f'  Saved {self.model_name.upper()} {by} search model to {model_search_name}')
+        self._logger.info(f'  Saved {self.model_name.upper()} {search_by} search model to {model_search_name}')
         self.best_params = model_search.best_params_
-        self.logger.info(f"  Best score {model_search.best_score_:.4f} with best parameters: {self.best_params}")
+        self._logger.info(f"  Best score {model_search.best_score_:.4f} with best parameters: {self.best_params}")
 
     def fit_and_save_best_model(self, x_train_val, y_train_val, best_params=None):
         if best_params is not None:
             self.best_params = best_params
-        self.logger.info(f"Fitting the best {self.model_name.upper()} with {self.best_params}...")
+        if self.best_params is None:
+            raise ValueError('No best parameters are specified.')
+        self._logger.info(f"Fitting the best {self.model_name.upper()} with {self.best_params}...")
         self.model = self._get_best_model()
         self.model.fit(x_train_val, y_train_val)
-        self.logger.info('  ok')
-        model_name = f'../models/{self.log_time}_{self.model_name}.sav'
+        self._logger.info('  ok')
+        model_name = f'../models/{self._log_time}_{self.model_name}.sav'
         pickle.dump(self.model, open(model_name, 'wb'))
-        self.logger.info(f'  Saved the best {self.model_name.upper()} to {model_name}')
+        self._logger.info(f'  Saved the best {self.model_name.upper()} to {model_name}')
 
     def save_predictions(self, x, meta):
-        self.logger.info('Predicting all the data...')
+        self._logger.info('Predicting all the data...')
         y_preds = self.model.predict(x)
-        self.logger.info('  ok')
-        preds_name = f'../preds/{self.log_time}_{self.model_name}.tif'
+        self._logger.info('  ok')
+        preds_name = f'../preds/{self._log_time}_{self.model_name}.tiff'
         save_predictions_geotiff(meta, y_preds, preds_name)
-        self.logger.info(f'  Saved {self.model_name.upper()} predictions to {preds_name}')
+        self._logger.info(f'  Saved {self.model_name.upper()} predictions to {preds_name}')
 
-    def evaluate_all(self, x_test, y_test, feature_names):
-        self.logger.info('Evaluating by metrics...')
+    def evaluate(self, x_test, y_test):
+        raise NotImplementedError
+
+    def load_pretrained_model(self, pretrained_name):
+        self._logger.info(f"Loading pretrained {pretrained_name}...")
+        self.model = pickle.load(open(pretrained_name, 'rb'))
+        self._logger.info('  ok')
+
+    def _get_model_base_and_params_list_grid(self):
+        raise NotImplementedError
+
+    def _get_model_base_and_params_list_random(self):
+        raise NotImplementedError
+
+    def _get_best_model(self):
+        raise NotImplementedError
+
+
+class ModelCropland(Model):
+    def __init__(self, logger, log_time, model_name, pretrained_name=None):
+        # inherent from parent
+        super().__init__(logger, log_time, model_name)
+        self._check_model_name(model_list=['svc', 'rfc', 'mlp', 'gru'])
+        self._logger.info(f'===== {self.model_name.upper()} =====')
+        # load pretrained
+        if pretrained_name is not None:
+            self._logger.info(f'Changed log time from {log_time} to {pretrained_name.split("_")[0]}')
+            self._log_time = pretrained_name.split('_')[0]
+            if pretrained_name.split('_')[1] != self.model_name:
+                raise ValueError('Initialized model is not the same as the pretrained model.')
+            self.load_pretrained_model(f'../models/{pretrained_name}.sav')
+
+    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=4):
+        super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv)
+
+    def evaluate(self, x_test, y_test, feature_names):
+        self._logger.info('Evaluating by metrics...')
         self.evaluate_by_metrics(x_test, y_test)
-        self.logger.info('Evaluating by feature importance...')
-        self.evaluate_by_feature_importance(x_test, y_test, feature_names)
-        self.logger.info('Evaluating by open datasets...')
-        self.evaluate_by_open_datasets()
+        self._logger.info('Evaluating by open datasets...')
+        pred_path = f'../preds/{self._log_time}_{self.model_name}.tiff'
+        self.evaluate_by_open_datasets(pred_path)
+        # self._logger.info('Evaluating by feature importance...')
+        # self.evaluate_by_feature_importance(x_test, y_test, feature_names)
 
     def evaluate_by_metrics(self, x_test, y_test):
-        self.logger.info("Predicting test data...")
+        self._logger.info("Predicting test data...")
         y_test_pred = self.model.predict(x_test)
-        self.logger.info('  ok')
-        self.logger.info(
-            f"\n{classification_report(y_test, y_test_pred, labels=[1, 3], target_names=['crops', 'non-crops'])}"
+        self._logger.info('  ok')
+        # !! `labels` is related to the discrete number
+        self._logger.info(
+            f"\n{classification_report(y_test, y_test_pred, labels=[2, 3], target_names=['crops', 'non-crops'])}"
         )
 
     def evaluate_by_feature_importance(self, x_test, y_test, feature_names):
-        model_PI = f'../preds/{self.log_time}_{self.model_name}_PI.csv'
+        model_PI = f'../preds/{self._log_time}_{self.model_name}_PI.csv'
         permutation_importance_table(self.model, x_test, y_test, feature_names, f'{model_PI}')
-        self.logger.info('  ok')
-        self.logger.info(f'  Saved permutation importance to {model_PI}')
+        self._logger.info('  ok')
+        self._logger.info(f'  Saved permutation importance to {model_PI}')
         if self.model_name == 'rfc':
-            model_II = f'../preds/{self.log_time}_{self.model_name}_II.csv'
+            model_II = f'../preds/{self._log_time}_{self.model_name}_II.csv'
             impurity_importance_table(feature_names, self.model.feature_importances_, f'{model_II}')
-            self.logger.info(f'  Saved impurity importance to {model_II}')
+            self._logger.info(f'  Saved impurity importance to {model_II}')
 
-    def evaluate_by_open_datasets(self, pred_path=None):
-        if pred_path is None:
-            pred_path = f'../preds/{self.log_time}_{self.model_name}.tif'
+    def evaluate_by_open_datasets(self, pred_path):
         ancilliary_path = 'K:/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/'
 
         # gfsad
@@ -101,12 +138,12 @@ class Model(object):
         gfsad_clip_path = '../data/gfsad_clipped.tiff'
         gfsad_align_path = '../data/gfsad_aligned.tiff'
 
-        self.logger.info('Comparing GFSAD dataset with predictions...')
+        self._logger.info('Comparing GFSAD dataset with predictions...')
         clip_open_datasets_based_on_study_area(gfsad_path, gfsad_clip_path)
-        self.logger.info('  Clipped GFSAD dataset to study_region.')
+        self._logger.info('  Clipped GFSAD dataset to study_region.')
         align_raster(pred_path, gfsad_clip_path, gfsad_align_path)
-        self.logger.info('  Aligned GFSAD dataset to predictions.')
-        compare_predictions_with_gfsad(pred_path, gfsad_align_path, self.logger)
+        self._logger.info('  Aligned GFSAD dataset to predictions.')
+        compare_predictions_with_gfsad(pred_path, gfsad_align_path, self._logger)
 
         # copernicus
         copernicus_path = ancilliary_path + 'landcover/Copernicus_LC100m/INDIA_2019/' + \
@@ -114,64 +151,66 @@ class Model(object):
         copernicus_clip_path = '../data/copernicus_clipped.tiff'
         copernicus_align_path = '../data/copernicus_aligned.tiff'
 
-        self.logger.info('Comparing Copernicus dataset with predictions...')
+        self._logger.info('Comparing Copernicus dataset with predictions...')
         clip_open_datasets_based_on_study_area(copernicus_path, copernicus_clip_path)
-        self.logger.info('  Clipped Copernicus dataset to study_region.')
+        self._logger.info('  Clipped Copernicus dataset to study_region.')
         align_raster(pred_path, copernicus_clip_path, copernicus_align_path)
-        self.logger.info('  Aligned Copernicus dataset to predictions.')
-        compare_predictions_with_copernicus(pred_path, copernicus_align_path, self.logger)
+        self._logger.info('  Aligned Copernicus dataset to predictions.')
+        compare_predictions_with_copernicus(pred_path, copernicus_align_path, self._logger)
 
     def load_pretrained_model(self, pretrained_name):
-        self.logger.info(f"Loading pretrained {pretrained_name}...")
+        self._logger.info(f"Loading pretrained {pretrained_name}...")
         self.model = pickle.load(open(pretrained_name, 'rb'))
-        self.logger.info('  ok')
+        self._logger.info('  ok')
 
     def _get_model_base_and_params_list_grid(self):
         if self.model_name == 'svc':
             model_base = SVC()
-            # model_params_list = dict(
-            #     C=[0.5, 1, 10, 100],
-            #     kernel=['linear', 'poly', 'rbf']
-            # )
             model_params_list = dict(
-                C=[1],
-                kernel=['linear']
+                C=[0.5, 1, 10, 100],
+                gamma=['scale', 'auto', 0.4],
+                kernel=['poly', 'rbf']
             )
+            # model_params_list = dict(
+            #     C=[1],
+            #     gamma=['scale'],
+            #     kernel=['rbf']
+            # )
         elif self.model_name == 'rfc':
             model_base = RandomForestClassifier()
-            # model_params_list = dict(
-            #     n_estimators=[100, 300, 500],
-            #     criterion=['gini', 'entropy'],
-            #     max_depth=[5, 10, 15],
-            #     max_samples=[0.5, 0.8, 1]
-            # )
             model_params_list = dict(
-                n_estimators=[100],
-                criterion=['gini'],
-                max_depth=[5],
-                max_samples=[0.8]
+                n_estimators=[100, 300, 500],
+                criterion=['gini', 'entropy'],
+                max_depth=[5, 10, 15],
+                max_samples=[0.5, 0.8, 1]
             )
+            # model_params_list = dict(
+            #     n_estimators=[100],
+            #     criterion=['gini'],
+            #     max_depth=[5],
+            #     max_samples=[0.8]
+            # )
         elif self.model_name == 'mlp':
             model_base = MLPClassifier()
-            # model_params_list = dict(
-            #     hidden_layer_sizes = [(100,), (300,), (300,300)],
-            #     alpha = [0.0001, 0.0005, 0.001, 0.005],
-            #     max_iter=[200, 500],
-            #     activation=['relu'],
-            #     early_stopping=[True]
-            # )
             model_params_list = dict(
-                hidden_layer_sizes=[(100,)],
-                alpha=[0.0001],
-                max_iter=[200],
+                hidden_layer_sizes=[(100,), (300,), (300, 300)],
+                alpha=[0.0001, 0.0005, 0.001, 0.005],
+                max_iter=[200, 500],
                 activation=['relu'],
                 early_stopping=[True]
             )
+            # model_params_list = dict(
+            #     hidden_layer_sizes=[(100,)],
+            #     alpha=[0.0001],
+            #     max_iter=[200],
+            #     activation=['relu'],
+            #     early_stopping=[True]
+            # )
         else:
             model_base = None
             model_params_list = None
-        self.logger.info(f'  model base {model_base}')
-        self.logger.info(f'  model parameters list {model_params_list}')
+        self._logger.info(f'  model base {model_base}')
+        self._logger.info(f'  model parameters list {model_params_list}')
         return model_base, model_params_list
 
     def _get_model_base_and_params_list_random(self):
@@ -179,7 +218,8 @@ class Model(object):
             model_base = SVC()
             model_params_dist = dict(
                 C=loguniform(0.1, 100),
-                kernel=['linear', 'poly', 'rbf']
+                gamma=['scale', 'auto', 0.4],
+                kernel=['poly', 'rbf']
             )
         elif self.model_name == 'rfc':
             model_base = RandomForestClassifier()
@@ -187,7 +227,7 @@ class Model(object):
                 n_estimators=randint(100, 1000),
                 criterion=['gini', 'entropy'],
                 max_depth=randint(5, 15),
-                max_samples=uniform(0.5, 1)
+                max_samples=uniform(0.5, 0.5)  # uniform(loc, scale) -> a=loc, b=loc+scale
             )
         elif self.model_name == 'mlp':
             model_base = MLPClassifier()
@@ -201,28 +241,154 @@ class Model(object):
         else:
             model_base = None
             model_params_dist = None
-        self.logger.info(f'  model base {model_base}')
-        self.logger.info(f'  model parameters distribution {model_params_dist}')
+        self._logger.info(f'  model base {model_base}')
+        self._logger.info(f'  model parameters distribution {model_params_dist}')
         return model_base, model_params_dist
 
     def _get_best_model(self):
         if self.model_name == 'svc':
             model = SVC(
                 C=self.best_params['C'],
-                kernel=self.best_params['kernel'])
+                gamma=self.best_params['gamma'],
+                kernel=self.best_params['kernel']
+            )
         elif self.model_name == 'rfc':
             model = RandomForestClassifier(
                 n_estimators=self.best_params['n_estimators'],
                 criterion=self.best_params['criterion'],
                 max_depth=self.best_params['max_depth'],
-                max_samples=self.best_params['max_samples'])
+                max_samples=self.best_params['max_samples']
+            )
         elif self.model_name == 'mlp':
             model = MLPClassifier(
                 hidden_layer_sizes=self.best_params['hidden_layer_sizes'],
                 alpha=self.best_params['alpha'],
                 max_iter=self.best_params['max_iter'],
                 activation=self.best_params['activation'],
-                early_stopping=self.best_params['early_stopping'])
+                early_stopping=self.best_params['early_stopping']
+            )
         else:
             model = None
         return model
+
+
+class ModelCropSpecific(Model):
+    def __init__(self, logger, log_time, model_name, pretrained_name=None):
+        # inherent from parent
+        super().__init__(logger, log_time, model_name)
+        self._check_model_name(model_list=['ocsvm', 'pul', 'pul-w'])
+        # add pretrained_name and base model
+        if pretrained_name is None:
+            self.base_model = None
+            self._logger.info('Train from scratch.')
+        else:
+            self.load_pretrained_model(pretrained_name)
+
+    def find_best_parameters(self, x_train_val, y_train_val, scoring='recall', search_by='grid', cv=4):
+        super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv)
+
+    def evaluate(self, x_test, y_test, feature_names=None):
+        self._logger.info('Evaluating by metrics...')
+        self.evaluate_by_recall(x_test, y_test)
+
+    def evaluate_by_recall(self, x_test, y_test):
+        self._logger.info("Predicting test data...")
+        y_test_pred = self.model.predict(x_test)
+        self._logger.info('  ok')
+        # TODO: labels values?
+        self._logger.info(
+            f"\n{recall_score(y_test, y_test_pred)}"
+        )
+
+    def _get_model_base_and_params_list_grid(self):
+        if self.model_name == 'ocsvm':
+            model_base = OneClassSVM()
+            # model_params_list = dict(
+            #     kernel=['poly', 'rbf'],
+            #     gamma=['scale', 'auto', 0.4],
+            #     nu=[0.3, 0.5, 0.7]
+            # )
+            model_params_list = dict(
+                kernel=['rbf'],
+                gamma=['scale'],
+                nu=[0.5]
+            )
+        elif self.model_name == 'pul':
+            model_base = ElkanotoPuClassifier(SVC())
+            # model_params_list = dict(
+            #     estimator=[SVC(), RandomForestClassifier()],
+            #     hold_out_ratio=[0.1, 0.2]
+            # )
+            model_params_list = dict(
+                estimator=[SVC()],
+                hold_out_ratio=[0.1]
+            )
+        else:
+            model_base = WeightedElkanotoPuClassifier(SVC(), labeled=10, unlabeled=20)
+            # model_params_list = dict(
+            #     estimator=[SVC(), RandomForestClassifier()],
+            #     labeled=[10, 15],
+            #     unlabeled=[20, 10],
+            #     hold_out_ratio=[0.1, 0.2]
+            # )
+            model_params_list = dict(
+                estimator=[SVC()],
+                labeled=[10],
+                unlabeled=[20],
+                hold_out_ratio=[0.1]
+            )
+        self._logger.info(f'  model base {model_base}')
+        self._logger.info(f'  model parameters list {model_params_list}')
+        return model_base, model_params_list
+
+    def _get_model_base_and_params_list_random(self):
+        if self.model_name == 'ocsvm':
+            model_base = OneClassSVM()
+            model_params_dist = dict(
+                kernel=['linear', 'poly', 'rbf'],
+                gamma=uniform(0.2, 0.8),
+                nu=uniform(0, 1)
+            )
+        elif self.model_name == 'pul':
+            model_base = ElkanotoPuClassifier(SVC())
+            model_params_dist = dict(
+                estimator=[SVC(), RandomForestClassifier()],
+                hold_out_ratio=uniform(0.1, 0.2)
+            )
+        else:
+            model_base = WeightedElkanotoPuClassifier(SVC(), labeled=10, unlabeled=20)
+            model_params_dist = dict(
+                estimator=[SVC(), RandomForestClassifier()],
+                labeled=randint(5, 15),
+                unlabeled=randint(5, 15),
+                hold_out_ratio=uniform(0.1, 0.2)
+            )
+        self._logger.info(f'  model base {model_base}')
+        self._logger.info(f'  model parameters list {model_params_dist}')
+        return model_base, model_params_dist
+
+    def _get_best_model(self):
+        if self.model_name == 'ocsvm':
+            model = OneClassSVM(
+                kernel=self.best_params['kernel'],
+                gamma=self.best_params['gamma'],
+                nu=self.best_params['nu']
+            )
+        elif self.model_name == 'pul':
+            model = ElkanotoPuClassifier(
+                estimator=self.best_params['estimator'],
+                hold_out_ratio=self.best_params['hold_out_ratio']
+            )
+        else:
+            model = WeightedElkanotoPuClassifier(
+                estimator=self.best_params['estimator'],
+                labeled=self.best_params['labeled'],
+                unlabeled=self.best_params['unlabeled'],
+                hold_out_ratio=self.best_params['hold_out_ratio']
+            )
+        return model
+
+    def _predict_pretrained_base_model(self, x):
+        self._logger.info('Predicting x ...')
+        preds = self.base_model.predict(x)
+        return preds

@@ -18,7 +18,7 @@ def evaluate_by_open_datasets(args):
     gfsad_path = args.ancilliary_data + 'cropland/GFSAD30/GFSAD30SAAFGIRCE_2015_N30E70_001_2017286103800.tif'
     gfsad_clip_path = '../data/gfsad_clipped.tiff'
     gfsad_align_path = '../data/gfsad_aligned.tiff'
-    pred_path = '../preds/1008-183014_rfc.tif'
+    pred_path = '../preds/1022-102249_svc.tiff'
 
     clip_open_datasets_based_on_study_area(gfsad_path, gfsad_clip_path)
     align_raster(pred_path, gfsad_clip_path, gfsad_align_path)
@@ -29,14 +29,14 @@ def evaluate_by_open_datasets(args):
                       'E060N40_PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif'
     copernicus_clip_path = '../data/copernicus_clipped.tiff'
     copernicus_align_path = '../data/copernicus_aligned.tiff'
-    pred_path = '../preds/1008-183014_rfc.tif'
+    pred_path = '../preds/1008-183014_rfc.tiff'
 
     clip_open_datasets_based_on_study_area(copernicus_path, copernicus_clip_path)
     align_raster(pred_path, copernicus_clip_path, copernicus_align_path)
     compare_predictions_with_copernicus(pred_path, copernicus_align_path)
 
     # compare predictions
-    diff_two_predictions('../preds/1008-183014_rfc.tif', '../preds/1007-153151_svm.tif')
+    diff_two_predictions('../preds/1008-183014_rfc.tiff', '../preds/1007-153151_svm.tiff')
 
 
 def clip_open_datasets_based_on_study_area(input_path, output_path):
