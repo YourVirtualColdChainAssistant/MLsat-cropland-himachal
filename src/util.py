@@ -3,6 +3,7 @@ import re
 import sys
 import math
 import fiona
+import pickle
 import logging
 import datetime
 import numpy as np
@@ -277,14 +278,21 @@ def count_classes(logger, y):
     tot_num = len(y)
     for i in np.unique(y):
         y_i = y[y == i]
-        logger.info(f'  label = {i}, pixel number = {y_i.shape[0]}, percentage = {round(len(y_i) / tot_num * 100, 2)}%')
+        msg = f'  label = {i}, pixel number = {y_i.shape[0]}, percentage = {round(len(y_i) / tot_num * 100, 2)}%'
+        if logger is None:
+            print(msg)
+        else:
+            logger.info(msg)
 
 
 def save_predictions_geotiff(meta_src, predictions, save_path):
     # Register GDAL format drivers and configuration options with a context manager
     color_map = {
+        0: (0, 0, 0),
+        1: (240, 65, 53),
         2: (154, 205, 50),
-        3: (184, 134, 11)
+        3: (184, 134, 11),
+        255: (255, 255, 255)
     }
     with rasterio.Env():
         # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
@@ -468,3 +476,27 @@ def correct_predictions():
 
 def resample_negatives(pos, neg):
     pass
+
+
+def get_cropland_mask(df, num_feature, pretrained_name):
+    # read pretrained model
+    trained_model = pickle.load(open(f'../models/{pretrained_name}.sav', 'rb'))
+
+    # new columns
+    # df['gt_apples'] = 0
+    # df.loc[df.label.values == 1, 'gt_apples'] = 1
+    df['gt_cropland'] = 0
+    df.loc[(df.label.values == 1) | (df.label.values == 2), 'gt_cropland'] = 1
+
+    # cropland
+    to_pred_mask = df.label.values == 0
+    preds = trained_model.predict(df.iloc[to_pred_mask, :num_feature].values)
+    cropland_pred = np.empty_like(preds)
+    cropland_pred[preds == 2] = 1
+    cropland_pred[preds == 3] = 0
+    df['gp_cropland'] = df['gt_cropland'].copy()
+    df.loc[to_pred_mask, 'gp_cropland'] = cropland_pred
+    df['gp_cropland_mask'] = False
+    df.loc[df.gp_cropland.values == 1, 'gp_cropland_mask'] = True
+
+    return df.gp_cropland_mask.values

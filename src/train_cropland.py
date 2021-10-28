@@ -1,9 +1,9 @@
 import argparse
 import datetime
 from util import *
-from util import get_log_dir, get_logger, merge_shapefiles
+from util import get_log_dir, get_logger, merge_shapefiles, get_grid_idx
 from visualization import NVDI_profile, visualize_train_test_grid_split
-from prepare_data import Pipeline, train_test_split, spatial_cross_validation
+from prepare_data import Pipeline, train_test_split, get_spatial_cv_fold
 from models import ModelCropland
 
 
@@ -31,26 +31,26 @@ def classifier_cropland(args):
     meta = pipe.meta
     num_feature = df.columns.shape[0] - 1
     x = df.iloc[:, :num_feature].values
+    df['grid_idx'] = list(get_grid_idx(args.grid_size, meta['height'], meta['width']).reshape(-1))
 
     # train val test split
-    if args.dataset_split_by == 'random':
+    if args.dataset_split_by == 'spatial':
+        logger.info('Spatial train-val-test split...')
+        x_train_val, x_test, y_train_val, y_test, grid_idx_train_val, grid_idx_test = \
+            train_test_split(logger, df, df['label'] != 0, num_feature, split_by='spatial',
+                             test_ratio=0.2, random_seed=args.random_seed)
+        data_cv, grid_idx_fold = get_spatial_cv_fold(x_train_val, y_train_val, grid_idx_train_val)
+        visualize_train_test_grid_split(meta, args.grid_size, grid_idx_test, [grid_idx_train_val],
+                                        f'../figs/cropland_{args.grid_size}_train_test_split_{args.random_seed}.tiff')
+        logger.info('Saved train-test visualization.')
+        visualize_train_test_grid_split(meta, args.grid_size, grid_idx_test, grid_idx_fold,
+                                        f'../figs/cropland_{args.grid_size}_train_val_test_split_{args.random_seed}.tiff')
+        logger.info('Saved train-val-test visualization.')
+    else:
         logger.info('Random train-val-test split...')
         x_train_val, x_test, y_train_val, y_test, grid_idx_train_val, grid_idx_test = \
-            train_test_split(logger, df, df['label'] != 0, num_feature, split_by='random', spatial_dict=None,
+            train_test_split(logger, df, df['label'] != 0, num_feature, split_by='random',
                              test_ratio=0.2)
-    elif args.dataset_split_by == 'spatial':
-        logger.info('Spatial train-val-test split...')
-        spatial_dict = {'grid_size': args.grid_size, 'height': meta['height'], 'width': meta['width']}
-        x_train_val, x_test, y_train_val, y_test, grid_idx_train_val, grid_idx_test = \
-            train_test_split(logger, df, df['label'] != 0, num_feature, split_by='spatial', spatial_dict=spatial_dict,
-                             test_ratio=0.2, random_seed=args.random_seed)
-        data_cv, grid_idx_fold = spatial_cross_validation(x_train_val, y_train_val, grid_idx_train_val)
-        visualize_train_test_grid_split(meta, spatial_dict, grid_idx_test, [grid_idx_train_val],
-                                        f'../preds/cropland_train_test_split_{args.random_seed}.tiff')
-        logger.info('Saved train-test visualization.')
-        visualize_train_test_grid_split(meta, spatial_dict, grid_idx_test, grid_idx_fold,
-                                        f'../preds/cropland_train_val_test_split_{args.random_seed}.tiff')
-        logger.info('Saved train-val-test visualization.')
 
     # print
     feature_names = df.columns[:num_feature]
@@ -63,15 +63,15 @@ def classifier_cropland(args):
     svc = ModelCropland(logger, log_time, 'svc')
     # # choose from
     # grid search
-    if args.dataset_split_by == 'random':
-        svc.find_best_parameters(x_train_val, y_train_val, search_by=args.cv_search_by)
-    else:
+    if args.dataset_split_by == 'spatial':
         svc.find_best_parameters(x_train_val, y_train_val, search_by=args.cv_search_by, cv=data_cv)
+    else:
+        svc.find_best_parameters(x_train_val, y_train_val, search_by=args.cv_search_by)
     svc.fit_and_save_best_model(x_train_val, y_train_val)
     # fit known best parameters
     # svc.fit_and_save_best_model(x_train_val, y_train_val, {'C': 100, 'kernel': 'rbf'})
     # # predict and evaluate
-    svc.save_predictions(x, meta)
+    svc.predict_and_save(x, meta)
     svc.evaluate(x_test, y_test, feature_names)
 
     # ## RFC
@@ -120,7 +120,7 @@ if __name__ == '__main__':
                         help='Method to split train-val-test dataset.')
     parser.add_argument('--cv_search_by', type=str, default='grid', choices=['random', 'grid'],
                         help='Method to do cross validation.')
-    parser.add_argument('--grid_size', type=int, default=64,
+    parser.add_argument('--grid_size', type=int, default=1000,
                         help='Size of grid during spatial split.')
     parser.add_argument('--random_seed', type=int, default=42,
                         help='Random see for train_test_split.')

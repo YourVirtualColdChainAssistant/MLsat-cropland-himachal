@@ -1,4 +1,11 @@
-== 1021-181246_cropland.log
+== 1023-162137_cropland.log (svc/rfc/mlp + spatial cv + grid search)
+	+ grid_size = 256, random seed = 42
+
+== 1022-170556_cropland.log (svc/rfc/mlp + spatial cv + grid search)
+	+ grid_size = 64, random seed = 42 
+
+== 1022-160815_cropland.log (svc/rfc/mlp + preselected hyperparams)
+	+ grid_size = 64, random seed = 42
 	+ more data in shadows
 	+ spatial cross validation
 

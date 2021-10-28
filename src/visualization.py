@@ -283,9 +283,9 @@ class NVDI_profile(object):
         return ndvi_array_eql, timestamps_af, timestamps_ref
 
 
-def visualize_train_test_grid_split(meta_src, spatial_dict, grid_idx_test, grid_idx_fold, save_path):
+def visualize_train_test_grid_split(meta_src, grid_size, grid_idx_test, grid_idx_fold, save_path):
     # get the grid idx
-    grid_size, height, width = spatial_dict['grid_size'], spatial_dict['height'], spatial_dict['width']
+    grid_size, height, width = grid_size, meta_src['height'], meta_src['width']
     grid_idx = get_grid_idx(grid_size, height, width).reshape(-1)
     output = np.zeros_like(grid_idx)
     # build test

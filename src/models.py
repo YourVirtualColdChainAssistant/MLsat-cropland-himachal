@@ -1,4 +1,6 @@
 import pickle
+
+import numpy as np
 from scipy.stats import uniform, loguniform, randint
 from sklearn.svm import SVC, OneClassSVM
 from sklearn.ensemble import RandomForestClassifier
@@ -17,14 +19,16 @@ class Model(object):
         self._logger = logger
         self._log_time = log_time
         self.model_name = model_name
+        self.to_name = f'{self._log_time}_{self.model_name}'
         self.best_params = None
         self.model = None
+        self._logger.info(f'===== {self.model_name.upper()} =====')
 
     def _check_model_name(self, model_list):
         if self.model_name not in model_list:
             raise ValueError(f'No such model {self.model_name}. Please choose from {model_list}.')
 
-    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=4):
+    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3):
         self._logger.info(f"Finding the best parameters using {search_by} search...")
         if search_by == 'grid':
             model_base, model_params = self._get_model_base_and_params_list_grid()
@@ -40,7 +44,7 @@ class Model(object):
         model_search.fit(x_train_val, y_train_val)
         self._logger.info('  ok')
         self._logger.info(f"\n{model_search.cv_results_}")
-        model_search_name = f'../models/{self._log_time}_{self.model_name}_{search_by}.sav'
+        model_search_name = f'../models/{self.to_name}_{search_by}.sav'
         pickle.dump(model_search, open(model_search_name, 'wb'))
         self._logger.info(f'  Saved {self.model_name.upper()} {search_by} search model to {model_search_name}')
         self.best_params = model_search.best_params_
@@ -53,19 +57,20 @@ class Model(object):
             raise ValueError('No best parameters are specified.')
         self._logger.info(f"Fitting the best {self.model_name.upper()} with {self.best_params}...")
         self.model = self._get_best_model()
-        self.model.fit(x_train_val, y_train_val)
+        if self.model_name == 'ocsvm':
+            self.model.fit(x_train_val)
+        else:
+            self.model.fit(x_train_val, y_train_val)
         self._logger.info('  ok')
-        model_name = f'../models/{self._log_time}_{self.model_name}.sav'
+        model_name = f'../models/{self.to_name}.sav'
         pickle.dump(self.model, open(model_name, 'wb'))
         self._logger.info(f'  Saved the best {self.model_name.upper()} to {model_name}')
 
-    def save_predictions(self, x, meta):
+    def predict_and_save(self, x, meta, to_name=None):
         self._logger.info('Predicting all the data...')
         y_preds = self.model.predict(x)
         self._logger.info('  ok')
-        preds_name = f'../preds/{self._log_time}_{self.model_name}.tiff'
-        save_predictions_geotiff(meta, y_preds, preds_name)
-        self._logger.info(f'  Saved {self.model_name.upper()} predictions to {preds_name}')
+        self._save_predictions(meta, y_preds, to_name)
 
     def evaluate(self, x_test, y_test):
         raise NotImplementedError
@@ -74,6 +79,13 @@ class Model(object):
         self._logger.info(f"Loading pretrained {pretrained_name}...")
         self.model = pickle.load(open(pretrained_name, 'rb'))
         self._logger.info('  ok')
+
+    def _save_predictions(self, meta, y_preds, to_name=None):
+        if to_name is None:
+            to_name = self.to_name
+        preds_name = f'../preds/{to_name}.tiff'
+        save_predictions_geotiff(meta, y_preds, preds_name)
+        self._logger.info(f'  Saved {self.model_name.upper()} predictions to {preds_name}')
 
     def _get_model_base_and_params_list_grid(self):
         raise NotImplementedError
@@ -90,7 +102,6 @@ class ModelCropland(Model):
         # inherent from parent
         super().__init__(logger, log_time, model_name)
         self._check_model_name(model_list=['svc', 'rfc', 'mlp', 'gru'])
-        self._logger.info(f'===== {self.model_name.upper()} =====')
         # load pretrained
         if pretrained_name is not None:
             self._logger.info(f'Changed log time from {log_time} to {pretrained_name.split("_")[0]}')
@@ -99,14 +110,14 @@ class ModelCropland(Model):
                 raise ValueError('Initialized model is not the same as the pretrained model.')
             self.load_pretrained_model(f'../models/{pretrained_name}.sav')
 
-    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=4):
+    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3):
         super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv)
 
     def evaluate(self, x_test, y_test, feature_names):
         self._logger.info('Evaluating by metrics...')
         self.evaluate_by_metrics(x_test, y_test)
         self._logger.info('Evaluating by open datasets...')
-        pred_path = f'../preds/{self._log_time}_{self.model_name}.tiff'
+        pred_path = f'../preds/{self.to_name}.tiff'
         self.evaluate_by_open_datasets(pred_path)
         # self._logger.info('Evaluating by feature importance...')
         # self.evaluate_by_feature_importance(x_test, y_test, feature_names)
@@ -121,12 +132,12 @@ class ModelCropland(Model):
         )
 
     def evaluate_by_feature_importance(self, x_test, y_test, feature_names):
-        model_PI = f'../preds/{self._log_time}_{self.model_name}_PI.csv'
+        model_PI = f'../preds/{self.to_name}_PI.csv'
         permutation_importance_table(self.model, x_test, y_test, feature_names, f'{model_PI}')
         self._logger.info('  ok')
         self._logger.info(f'  Saved permutation importance to {model_PI}')
         if self.model_name == 'rfc':
-            model_II = f'../preds/{self._log_time}_{self.model_name}_II.csv'
+            model_II = f'../preds/{self.to_name}_II.csv'
             impurity_importance_table(feature_names, self.model.feature_importances_, f'{model_II}')
             self._logger.info(f'  Saved impurity importance to {model_II}')
 
@@ -168,7 +179,7 @@ class ModelCropland(Model):
             model_base = SVC()
             model_params_list = dict(
                 C=[0.5, 1, 10, 100],
-                gamma=['scale', 'auto', 0.4],
+                gamma=['scale', 'auto'],
                 kernel=['poly', 'rbf']
             )
             # model_params_list = dict(
@@ -218,7 +229,7 @@ class ModelCropland(Model):
             model_base = SVC()
             model_params_dist = dict(
                 C=loguniform(0.1, 100),
-                gamma=['scale', 'auto', 0.4],
+                gamma=['scale', 'auto'],
                 kernel=['poly', 'rbf']
             )
         elif self.model_name == 'rfc':
@@ -284,21 +295,18 @@ class ModelCropSpecific(Model):
         else:
             self.load_pretrained_model(pretrained_name)
 
-    def find_best_parameters(self, x_train_val, y_train_val, scoring='recall', search_by='grid', cv=4):
+    def find_best_parameters(self, x_train_val, y_train_val, scoring='recall', search_by='grid', cv=3):
         super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv)
 
     def evaluate(self, x_test, y_test, feature_names=None):
-        self._logger.info('Evaluating by metrics...')
+        self._logger.info('Evaluating by recall...')
         self.evaluate_by_recall(x_test, y_test)
 
     def evaluate_by_recall(self, x_test, y_test):
         self._logger.info("Predicting test data...")
         y_test_pred = self.model.predict(x_test)
         self._logger.info('  ok')
-        # TODO: labels values?
-        self._logger.info(
-            f"\n{recall_score(y_test, y_test_pred)}"
-        )
+        self._logger.info(f"The best recall is {recall_score(y_test, y_test_pred, average='macro')}")
 
     def _get_model_base_and_params_list_grid(self):
         if self.model_name == 'ocsvm':
@@ -314,25 +322,25 @@ class ModelCropSpecific(Model):
                 nu=[0.5]
             )
         elif self.model_name == 'pul':
-            model_base = ElkanotoPuClassifier(SVC())
+            model_base = ElkanotoPuClassifier(SVC(probability=True))
             # model_params_list = dict(
-            #     estimator=[SVC(), RandomForestClassifier()],
+            #     estimator=[SVC(probability=True), RandomForestClassifier()],
             #     hold_out_ratio=[0.1, 0.2]
             # )
             model_params_list = dict(
-                estimator=[SVC()],
+                estimator=[SVC(probability=True)],
                 hold_out_ratio=[0.1]
             )
         else:
-            model_base = WeightedElkanotoPuClassifier(SVC(), labeled=10, unlabeled=20)
+            model_base = WeightedElkanotoPuClassifier(SVC(probability=True), labeled=10, unlabeled=20)
             # model_params_list = dict(
-            #     estimator=[SVC(), RandomForestClassifier()],
+            #     estimator=[SVC(probability=True), RandomForestClassifier()],
             #     labeled=[10, 15],
             #     unlabeled=[20, 10],
             #     hold_out_ratio=[0.1, 0.2]
             # )
             model_params_list = dict(
-                estimator=[SVC()],
+                estimator=[SVC(probability=True)],
                 labeled=[10],
                 unlabeled=[20],
                 hold_out_ratio=[0.1]
@@ -350,15 +358,15 @@ class ModelCropSpecific(Model):
                 nu=uniform(0, 1)
             )
         elif self.model_name == 'pul':
-            model_base = ElkanotoPuClassifier(SVC())
+            model_base = ElkanotoPuClassifier(SVC(probability=True))
             model_params_dist = dict(
-                estimator=[SVC(), RandomForestClassifier()],
+                estimator=[SVC(probability=True), RandomForestClassifier()],
                 hold_out_ratio=uniform(0.1, 0.2)
             )
         else:
-            model_base = WeightedElkanotoPuClassifier(SVC(), labeled=10, unlabeled=20)
+            model_base = WeightedElkanotoPuClassifier(SVC(probability=True), labeled=10, unlabeled=20)
             model_params_dist = dict(
-                estimator=[SVC(), RandomForestClassifier()],
+                estimator=[SVC(probability=True), RandomForestClassifier()],
                 labeled=randint(5, 15),
                 unlabeled=randint(5, 15),
                 hold_out_ratio=uniform(0.1, 0.2)
@@ -387,6 +395,33 @@ class ModelCropSpecific(Model):
                 hold_out_ratio=self.best_params['hold_out_ratio']
             )
         return model
+
+    def predict_and_save(self, x, meta, cropland_mask=None):
+        if cropland_mask is None:
+            # predict from scratch
+            to_name = self.to_name + '_from_scratch'
+            y_preds = self._predict_from_scratch(x)
+        else:
+            # predict from cropland
+            to_name = self.to_name + '_from_cropland'
+            y_preds = self._predict_from_cropland(x, cropland_mask)
+        self._save_predictions(meta, y_preds, to_name)
+
+    def _predict_from_cropland(self, x, cropland_mask):
+        self._logger.info('Predicting from cropland (with cropland only)...')
+        x_cropland = x[cropland_mask]
+        y_cropland_pred = self.model.predict(x_cropland)
+        self._logger.info('Masking cropland region...')
+        y_preds = np.zeros(x.shape[0], dtype=int)
+        y_preds[cropland_mask] = y_cropland_pred
+        self._logger.info('  ok')
+        return y_preds
+
+    def _predict_from_scratch(self, x):
+        self._logger.info('Predicting from scratch (with all data)...')
+        y_preds = self.model.predict(x)
+        self._logger.info('  ok')
+        return y_preds
 
     def _predict_pretrained_base_model(self, x):
         self._logger.info('Predicting x ...')
