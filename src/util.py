@@ -42,7 +42,7 @@ def split_raster():
     pass
 
 
-def clip_raster(images_dir, clip_from_shp='../data/study-area/study_area.shp'):
+def clip_raster(images_dir, clip_from_shp='../data/study_area/study_area.shp'):
     # shape file information
     with fiona.open(clip_from_shp, "r") as shapefile:
         shapes = [feature["geometry"] for feature in shapefile if feature["geometry"] is not None]
@@ -51,7 +51,7 @@ def clip_raster(images_dir, clip_from_shp='../data/study-area/study_area.shp'):
     # geotiff directory
     geotiff_dir = images_dir + 'geotiff/'
     # clip directory
-    clip_dir = images_dir + 'clip/'
+    clip_dir = images_dir + clip_from_shp.split('/')[2] + '/'
     if not os.path.exists(clip_dir):
         os.mkdir(clip_dir)
 
@@ -195,7 +195,6 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
         shape (pixel, number of bands, number of weeks)
     timestamps_bf: the raw timestamps
     """
-    logger.info(f'--- Stacking all timestamps {way} ---')
 
     # ### sanity check
     choices_sanity_check(['raw', 'weekly', 'monthly'], way, 'way')
@@ -245,11 +244,17 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
                     band_list.append(np.stack(band, axis=2).reshape(-1, len(band)))
                 else:
                     black_ids.append(id)
-                    logger.info(f'  Discard {filename} due to empty value.')
+
         # stack by index
         if len(band_list) != 0:
-            band_list = np.stack(band_list, axis=2).mean(axis=2)
-            # format printing
+            band_list = np.stack(band_list, axis=2).max(axis=2)
+        elif interpolation == 'zero' or i == 1:
+            band_list = np.zeros((meta['height'] * meta['width'], meta['count']))
+        else:
+            band_list = bands_list[-1]
+
+        # print
+        if len(ids) != 0:
             print_str = ''
             for id in ids:
                 if id in black_ids:
@@ -257,19 +262,15 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
                 else:
                     print_str += f'{timestamps_bf[id].strftime("%Y-%m-%d")}, '
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} ({print_str})')
+        elif interpolation == 'zero' or i == 1:
+            logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (0)')
         else:
-            # fill in all zero
-            if interpolation == 'zero' or i == 1:
-                band_list = np.zeros((meta['height'] * meta['width'], meta['count']))
-                logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (0)')
-            # fill in the last band_list
-            else:
-                band_list = bands_list[-1]
-                logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (previous)')
+            logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (previous)')
+
         bands_list.append(band_list)
     # stack finally
     bands_array = np.stack(bands_list, axis=2)
-    logger.info('Stack done!')
+    logger.info('  ok')
 
     return bands_array, meta, timestamps_bf, timestamps_af, timestamps_ref
 
@@ -419,25 +420,6 @@ def get_log_dir(log_dir='../logs/'):
     return log_dir
 
 
-def merge_shapefiles(to_label_path='../data/all-labels/all-labels.shp'):
-    # read all the shape files
-    old_apples_shp = gpd.read_file('../data/apples/survey20210716_polygons20210819_corrected20210831.shp')
-    new_apples_shp = gpd.read_file('../data/apples/survey20210825_polygons20210901_revised20210929.shp')
-    non_crops_shp = gpd.read_file('../data/non-crops/non-crop.shp')
-    other_crops_shp = gpd.read_file('../data/other-crops/other-crops.shp')
-    # put all shape files into one geo dataframe
-    all_labels_shp = gpd.GeoDataFrame(
-        pd.concat([old_apples_shp, new_apples_shp, other_crops_shp, non_crops_shp], axis=0))
-    all_labels_shp = all_labels_shp.dropna().reset_index(drop=True)  # delete empty polygons
-    all_labels_shp = multipolygons_to_polygons(all_labels_shp)
-    # mask for the study area
-    study_area_shp = gpd.read_file('../data/study-area/study_area.shp')
-    labels_in_study = gpd.overlay(all_labels_shp, study_area_shp, how='intersection')
-    cols2drop = [col for col in ['id', 'id_2'] if col in labels_in_study.columns]
-    labels_in_study = labels_in_study.drop(cols2drop, axis=1).rename(columns={'id_1': 'id'})
-    labels_in_study.to_file(to_label_path)  # save to folder
-
-
 def multipolygons_to_polygons(shp_file):
     # check the number of multipolygons
     multi_polygons_df = shp_file[shp_file['geometry'].type == 'MultiPolygon']
@@ -458,18 +440,6 @@ def multipolygons_to_polygons(shp_file):
     return polygons_df
 
 
-def get_grid_idx(cell_size=64, height=2357, width=1892):
-    num_h = math.ceil(height / cell_size)
-    num_w = math.ceil(width / cell_size)
-    num_range = np.arange(num_h * num_w).reshape(num_h, num_w)
-    print(f'There are {num_h * num_w} grid groups in total.')
-    grid_idx = num_range.repeat(cell_size, axis=0).repeat(cell_size, axis=1)
-    print(f'before: {grid_idx.shape}')
-    grid_idx = grid_idx[:height, :width]
-    print(f'after: {grid_idx.shape}')
-    return grid_idx
-
-
 def correct_predictions():
     pass
 
@@ -478,19 +448,17 @@ def resample_negatives(pos, neg):
     pass
 
 
-def get_cropland_mask(df, num_feature, pretrained_name):
+def get_cropland_mask(df, n_feature, pretrained_name):
     # read pretrained model
     trained_model = pickle.load(open(f'../models/{pretrained_name}.sav', 'rb'))
 
     # new columns
-    # df['gt_apples'] = 0
-    # df.loc[df.label.values == 1, 'gt_apples'] = 1
     df['gt_cropland'] = 0
     df.loc[(df.label.values == 1) | (df.label.values == 2), 'gt_cropland'] = 1
 
     # cropland
     to_pred_mask = df.label.values == 0
-    preds = trained_model.predict(df.iloc[to_pred_mask, :num_feature].values)
+    preds = trained_model.predict(df.iloc[to_pred_mask, :n_feature].values)
     cropland_pred = np.empty_like(preds)
     cropland_pred[preds == 2] = 1
     cropland_pred[preds == 3] = 0
@@ -500,3 +468,16 @@ def get_cropland_mask(df, num_feature, pretrained_name):
     df.loc[df.gp_cropland.values == 1, 'gp_cropland_mask'] = True
 
     return df.gp_cropland_mask.values
+
+
+def save_cv_results(res, save_path):
+    df = pd.DataFrame()
+    df['mean_fit_time'] = res['mean_fit_time']
+    df['std_fit_time'] = res['std_fit_time']
+    df['mean_score_time'] = res['mean_score_time']
+    df['std_score_time'] = res['std_score_time']
+    df['params'] = res['params']
+    df['mean_test_score'] = res['mean_test_score']
+    df['std_test_score'] = res['std_test_score']
+    df['rank_test_score'] = res['rank_test_score']
+    df.to_csv(save_path, index=False)

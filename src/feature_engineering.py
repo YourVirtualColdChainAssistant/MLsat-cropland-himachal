@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 
 
+# TODO: check taking avg or max for multiple profile
+# TODO: smooth profile by method I investigated
 def calculate_ndvi(red, nir):
     """ Compute the NDVI
         INPUT : red (np.array) -> the Red band images as a numpy array of float

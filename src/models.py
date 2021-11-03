@@ -1,5 +1,4 @@
 import pickle
-
 import numpy as np
 from scipy.stats import uniform, loguniform, randint
 from sklearn.svm import SVC, OneClassSVM
@@ -7,7 +6,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import classification_report, recall_score
-from util import save_predictions_geotiff
+from util import save_predictions_geotiff, save_cv_results
 from evaluation import align_raster, clip_open_datasets_based_on_study_area, \
     compare_predictions_with_gfsad, compare_predictions_with_copernicus, \
     impurity_importance_table, permutation_importance_table
@@ -28,24 +27,27 @@ class Model(object):
         if self.model_name not in model_list:
             raise ValueError(f'No such model {self.model_name}. Please choose from {model_list}.')
 
-    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3):
+    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3, n_iter=10,
+                             testing=False):
         self._logger.info(f"Finding the best parameters using {search_by} search...")
         if search_by == 'grid':
-            model_base, model_params = self._get_model_base_and_params_list_grid()
-            model_search = GridSearchCV(estimator=model_base, param_grid=model_params,
-                                        cv=cv, scoring=scoring, verbose=3, n_jobs=-1)
+            model_base, model_params = self._get_model_base_and_params_list_grid(testing)
+            model_search = GridSearchCV(estimator=model_base, param_grid=model_params, cv=cv, scoring=scoring,
+                                        verbose=3, n_jobs=-1)
         elif search_by == 'random':
+            if testing:
+                n_iter = 1
             model_base, model_params = self._get_model_base_and_params_list_random()
-            model_search = RandomizedSearchCV(estimator=model_base, param_distributions=model_params,
-                                              cv=cv, scoring=scoring, verbose=3, n_jobs=-1, n_iter=10)
+            model_search = RandomizedSearchCV(estimator=model_base, param_distributions=model_params, cv=cv,
+                                              scoring=scoring, verbose=3, n_jobs=-1, n_iter=n_iter)
         else:
             raise ValueError(f'No {search_by} search. Choose from ["grid", "random"]')
 
         model_search.fit(x_train_val, y_train_val)
         self._logger.info('  ok')
         self._logger.info(f"\n{model_search.cv_results_}")
-        model_search_name = f'../models/{self.to_name}_{search_by}.sav'
-        pickle.dump(model_search, open(model_search_name, 'wb'))
+        model_search_name = f'../models/{self.to_name}_{search_by}.csv'
+        save_cv_results(model_search.cv_results_, model_search_name)
         self._logger.info(f'  Saved {self.model_name.upper()} {search_by} search model to {model_search_name}')
         self.best_params = model_search.best_params_
         self._logger.info(f"  Best score {model_search.best_score_:.4f} with best parameters: {self.best_params}")
@@ -62,7 +64,7 @@ class Model(object):
         else:
             self.model.fit(x_train_val, y_train_val)
         self._logger.info('  ok')
-        model_name = f'../models/{self.to_name}.sav'
+        model_name = f'../models/{self.to_name}.pkl'
         pickle.dump(self.model, open(model_name, 'wb'))
         self._logger.info(f'  Saved the best {self.model_name.upper()} to {model_name}')
 
@@ -87,7 +89,7 @@ class Model(object):
         save_predictions_geotiff(meta, y_preds, preds_name)
         self._logger.info(f'  Saved {self.model_name.upper()} predictions to {preds_name}')
 
-    def _get_model_base_and_params_list_grid(self):
+    def _get_model_base_and_params_list_grid(self, testing):
         raise NotImplementedError
 
     def _get_model_base_and_params_list_random(self):
@@ -108,10 +110,12 @@ class ModelCropland(Model):
             self._log_time = pretrained_name.split('_')[0]
             if pretrained_name.split('_')[1] != self.model_name:
                 raise ValueError('Initialized model is not the same as the pretrained model.')
-            self.load_pretrained_model(f'../models/{pretrained_name}.sav')
+            self.load_pretrained_model(f'../models/{pretrained_name}.pkl')
 
-    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3):
-        super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv)
+    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3, n_iter=10,
+                             testing=False):
+        super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv,
+                                     n_iter=n_iter, testing=testing)
 
     def evaluate(self, x_test, y_test, feature_names):
         self._logger.info('Evaluating by metrics...')
@@ -174,49 +178,55 @@ class ModelCropland(Model):
         self.model = pickle.load(open(pretrained_name, 'rb'))
         self._logger.info('  ok')
 
-    def _get_model_base_and_params_list_grid(self):
+    def _get_model_base_and_params_list_grid(self, testing):
         if self.model_name == 'svc':
             model_base = SVC()
-            model_params_list = dict(
-                C=[0.5, 1, 10, 100],
-                gamma=['scale', 'auto'],
-                kernel=['poly', 'rbf']
-            )
-            # model_params_list = dict(
-            #     C=[1],
-            #     gamma=['scale'],
-            #     kernel=['rbf']
-            # )
+            if not testing:
+                model_params_list = dict(
+                    C=[0.5, 1, 10, 100],
+                    gamma=['scale', 'auto'],
+                    kernel=['poly', 'rbf']
+                )
+            else:
+                model_params_list = dict(
+                    C=[1],
+                    gamma=['scale'],
+                    kernel=['rbf']
+                )
         elif self.model_name == 'rfc':
             model_base = RandomForestClassifier()
-            model_params_list = dict(
-                n_estimators=[100, 300, 500],
-                criterion=['gini', 'entropy'],
-                max_depth=[5, 10, 15],
-                max_samples=[0.5, 0.8, 1]
-            )
-            # model_params_list = dict(
-            #     n_estimators=[100],
-            #     criterion=['gini'],
-            #     max_depth=[5],
-            #     max_samples=[0.8]
-            # )
+            if not testing:
+                model_params_list = dict(
+                    n_estimators=[100, 300, 500],
+                    criterion=['gini', 'entropy'],
+                    max_depth=[5, 10, 15],
+                    max_samples=[0.5, 0.8, 1]
+                )
+            else:
+                model_params_list = dict(
+                    n_estimators=[100],
+                    criterion=['gini'],
+                    max_depth=[5],
+                    max_samples=[0.8]
+                )
         elif self.model_name == 'mlp':
             model_base = MLPClassifier()
-            model_params_list = dict(
-                hidden_layer_sizes=[(100,), (300,), (300, 300)],
-                alpha=[0.0001, 0.0005, 0.001, 0.005],
-                max_iter=[200, 500],
-                activation=['relu'],
-                early_stopping=[True]
-            )
-            # model_params_list = dict(
-            #     hidden_layer_sizes=[(100,)],
-            #     alpha=[0.0001],
-            #     max_iter=[200],
-            #     activation=['relu'],
-            #     early_stopping=[True]
-            # )
+            if not testing:
+                model_params_list = dict(
+                    hidden_layer_sizes=[(100,), (300,), (300, 300)],
+                    alpha=[0.0001, 0.0005, 0.001, 0.005],
+                    max_iter=[200, 500],
+                    activation=['relu'],
+                    early_stopping=[True]
+                )
+            else:
+                model_params_list = dict(
+                    hidden_layer_sizes=[(100,)],
+                    alpha=[0.0001],
+                    max_iter=[200],
+                    activation=['relu'],
+                    early_stopping=[True]
+                )
         else:
             model_base = None
             model_params_list = None
@@ -295,8 +305,9 @@ class ModelCropSpecific(Model):
         else:
             self.load_pretrained_model(pretrained_name)
 
-    def find_best_parameters(self, x_train_val, y_train_val, scoring='recall', search_by='grid', cv=3):
-        super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv)
+    def find_best_parameters(self, x_train_val, y_train_val, scoring='recall', search_by='grid', cv=3, testing=False):
+        super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by,
+                                     cv=cv, testing=testing)
 
     def evaluate(self, x_test, y_test, feature_names=None):
         self._logger.info('Evaluating by recall...')
@@ -308,43 +319,49 @@ class ModelCropSpecific(Model):
         self._logger.info('  ok')
         self._logger.info(f"The best recall is {recall_score(y_test, y_test_pred, average='macro')}")
 
-    def _get_model_base_and_params_list_grid(self):
+    def _get_model_base_and_params_list_grid(self, testing):
         if self.model_name == 'ocsvm':
             model_base = OneClassSVM()
-            # model_params_list = dict(
-            #     kernel=['poly', 'rbf'],
-            #     gamma=['scale', 'auto', 0.4],
-            #     nu=[0.3, 0.5, 0.7]
-            # )
-            model_params_list = dict(
-                kernel=['rbf'],
-                gamma=['scale'],
-                nu=[0.5]
-            )
+            if not testing:
+                model_params_list = dict(
+                    kernel=['poly', 'rbf'],
+                    gamma=['scale', 'auto', 0.4],
+                    nu=[0.3, 0.5, 0.7]
+                )
+            else:
+                model_params_list = dict(
+                    kernel=['rbf'],
+                    gamma=['scale'],
+                    nu=[0.5]
+                )
         elif self.model_name == 'pul':
             model_base = ElkanotoPuClassifier(SVC(probability=True))
-            # model_params_list = dict(
-            #     estimator=[SVC(probability=True), RandomForestClassifier()],
-            #     hold_out_ratio=[0.1, 0.2]
-            # )
-            model_params_list = dict(
-                estimator=[SVC(probability=True)],
-                hold_out_ratio=[0.1]
-            )
+            if not testing:
+                model_params_list = dict(
+                    estimator=[SVC(probability=True), RandomForestClassifier()],
+                    hold_out_ratio=[0.1, 0.2]
+                )
+            else:
+                model_params_list = dict(
+                    estimator=[SVC(probability=True)],
+                    hold_out_ratio=[0.1]
+                )
         else:
             model_base = WeightedElkanotoPuClassifier(SVC(probability=True), labeled=10, unlabeled=20)
-            # model_params_list = dict(
-            #     estimator=[SVC(probability=True), RandomForestClassifier()],
-            #     labeled=[10, 15],
-            #     unlabeled=[20, 10],
-            #     hold_out_ratio=[0.1, 0.2]
-            # )
-            model_params_list = dict(
-                estimator=[SVC(probability=True)],
-                labeled=[10],
-                unlabeled=[20],
-                hold_out_ratio=[0.1]
-            )
+            if not testing:
+                model_params_list = dict(
+                    estimator=[SVC(probability=True), RandomForestClassifier()],
+                    labeled=[10, 15],
+                    unlabeled=[20, 10],
+                    hold_out_ratio=[0.1, 0.2]
+                )
+            else:
+                model_params_list = dict(
+                    estimator=[SVC(probability=True)],
+                    labeled=[10],
+                    unlabeled=[20],
+                    hold_out_ratio=[0.1]
+                )
         self._logger.info(f'  model base {model_base}')
         self._logger.info(f'  model parameters list {model_params_list}')
         return model_base, model_params_list

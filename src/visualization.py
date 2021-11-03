@@ -1,18 +1,20 @@
 import os
 import re
 import random
+import itertools
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 import rasterio
+import shapely
 import pyproj
 import pandas as pd
 import datetime
 from feature_engineering import add_bands
 from util import get_weekly_timestamps, get_monthly_timestamps, choices_sanity_check, \
-    load_geotiff, get_grid_idx, load_target_shp, compute_mask
+    load_geotiff, load_target_shp, compute_mask
 
 
 def normalize(array):
@@ -169,12 +171,14 @@ def plot_ndvi_profile(ndvi_array, train_mask, timestamps_ref, title=None, save_p
         plt.fill_between(timestamps_ref, mean - std, mean + std, color=colors_map[label], alpha=0.2)
         mean_df['mean_' + str(label)] = mean
         mean_df['std_' + str(label)] = std
-    mean_df.to_csv(f'../data/{title}.csv', index=False)
     plt.legend(loc='best')
     plt.xlabel('Time')
     plt.ylabel('NDVI')
     if title is not None:
         plt.title(title)
+        mean_df.to_csv(f'../figs/{title}.csv', index=False)
+    else:
+        mean_df.to_csv('../figs/NDVI_profile.csv', index=False)
     if save_path is not None:
         plt.savefig(save_path)
         print(f'Saved ndvi profile to {save_path}')
@@ -283,42 +287,40 @@ class NVDI_profile(object):
         return ndvi_array_eql, timestamps_af, timestamps_ref
 
 
-def visualize_train_test_grid_split(meta_src, grid_size, grid_idx_test, grid_idx_fold, save_path):
-    # get the grid idx
-    grid_size, height, width = grid_size, meta_src['height'], meta_src['width']
-    grid_idx = get_grid_idx(grid_size, height, width).reshape(-1)
-    output = np.zeros_like(grid_idx)
-    # build test
-    unique_grid_idx_test = list(set(grid_idx_test))
-    test_mask = [True if idx in unique_grid_idx_test else False for idx in grid_idx]
-    output[test_mask] = 5
-    # build train and val
-    if len(grid_idx_fold) == 1:
-        unique_grid_idx_train_val = list(set(grid_idx_fold[0]))
-        train_val_mask = [True if idx in unique_grid_idx_train_val else False for idx in grid_idx]
-        output[train_val_mask] = 1
-    else:
-        for i, fold in enumerate(grid_idx_fold, start=1):
-            unique_grid_idx_val = list(set(fold))
-            val_mask = [True if idx in unique_grid_idx_val else False for idx in grid_idx]
-            output[val_mask] = i
-    color_map = {
-        0: (0, 0, 0),
-        5: (138, 205, 226),  # test
-        1: (239, 135, 190),  # train (main color)
-        2: (249, 163, 203),
-        3: (252, 188, 215),
-        4: (255, 206, 230),
-    }
+def visualize_valid_block(valid_block, meta, save_path, cmap='Set2'):
+    iter_shapes = iter([(shapely.geometry.mapping(polygon), value + 1) for polygon, value in
+                        zip(valid_block.loc[:, 'geometry'], valid_block.loc[:, 'grid_id'])])
+    img = rasterio.features.rasterize(iter_shapes, out_shape=(meta['height'], meta['width']))
+    out_meta = meta.copy()
+    out_meta.update(count=1, dtype=rasterio.uint8)
+    write_1_band_raster(img, out_meta, save_path)
 
-    with rasterio.Env():
-        # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
-        out_meta = meta_src.copy()
-        out_meta.update(
-            dtype=rasterio.uint8,
-            count=1,
-            compress='lzw')
-        with rasterio.open(save_path, 'w', **out_meta) as dst:
-            # reshape into (band, height, width)
-            dst.write(output.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
-            dst.write_colormap(1, color_map)
+
+def visualize_cv(scv, train_val_coords, n_train_val, meta, save_path):
+    excluded_indices = []
+    all_indices = np.arange(n_train_val)
+    # construct the image
+    img = np.zeros((meta['height'], meta['width']), dtype=int)
+    for i, (train_indice, val_indice) in enumerate(scv.split(train_val_coords), start=1):
+        # each fold is a color
+        xs = train_val_coords[val_indice].apply(lambda x: x.coords[:][0][1]).to_numpy().astype(int)
+        ys = train_val_coords[val_indice].apply(lambda x: x.coords[:][0][0]).to_numpy().astype(int)
+        img[xs, ys] = i
+        excluded_indices.append(list(set(all_indices) - set(train_indice) - set(val_indice)))
+    excluded_indices = list(itertools.chain.from_iterable(excluded_indices))
+    # excluded points is another color
+    xs = train_val_coords[excluded_indices].apply(lambda x: x.coords[:][0][1]).to_numpy().astype(int)
+    ys = train_val_coords[excluded_indices].apply(lambda x: x.coords[:][0][0]).to_numpy().astype(int)
+    img[xs, ys] = i + 1
+    # save new raster
+    out_meta = meta.copy()
+    out_meta.update(dtype=rasterio.uint8, count=1, compress='lzw')
+    write_1_band_raster(img, out_meta, save_path)
+
+
+def write_1_band_raster(img, out_meta, save_path, cmap='Set2'):
+    color_map = {v: tuple(255 * np.array(c)) for v, c in enumerate(mpl.cm.get_cmap(cmap).colors, start=1)}
+    with rasterio.open(save_path, 'w', **out_meta) as dst:
+        # reshape into (band, height, width)
+        dst.write(img.astype(rasterio.uint8), indexes=1)
+        dst.write_colormap(1, color_map)

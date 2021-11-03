@@ -1,6 +1,6 @@
 import pickle
 import argparse
-
+import datetime
 import numpy as np
 
 from util import get_log_dir, get_logger, get_grid_idx, count_classes, get_cropland_mask
@@ -11,13 +11,14 @@ from visualization import visualize_train_test_grid_split
 
 def classifier_apples(args):
     # logger
+    now = datetime.datetime.now().strftime("%m%d-%H%M%S")
     log_time = args.base_name.split('_')[0]
     base_model_name = args.base_name.split('_')[1]
     logger = get_logger(get_log_dir(), __name__,
-                        f'{log_time}_apples_w_{base_model_name}.log', level='INFO')
+                        f'{now}_apples_w_{args.base_name}.log', level='INFO')
     logger.info(args)
     logger.info('----- Crop-specific Classification -----')
-    from_dir = args.images_dir + 'clip/'
+    from_dir = args.images_dir + 'clip_new_labels/'
 
     # follow pipeline
     pipe = Pipeline(logger, from_dir)

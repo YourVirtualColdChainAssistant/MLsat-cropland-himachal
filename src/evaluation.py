@@ -106,7 +106,7 @@ def compare_predictions_with_copernicus(pred_path, dataset_path, logger=None):
     # calculate
     num_in_dataset = (band_dataset == 1.0).sum()
     num_in_pred = (band_pred[band_dataset == 1.0] == 1.0).sum()
-    if logger == None:
+    if logger is None:
         print(f'Non-cropland pixel number in Copernicus: {num_in_dataset}')
         print(f'Non-cropland pixel number in prediction: {num_in_pred}')
         print(f'Percentage: {num_in_pred / num_in_dataset * 100:.2f}%')

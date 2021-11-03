@@ -5,7 +5,6 @@ import shutil
 import zipfile
 import argparse
 
-import geojson
 from sentinelsat import SentinelAPI
 
 import rasterio
@@ -18,7 +17,8 @@ from util import clip_raster
 def main(args):
     # download_raw(args.user, args.password, args.images_dir)
     # process_raw(args.images_dir)
-    clip_raster(args.images_dir, clip_from_shp='../data/study-area/study_area.shp')  # clip according to some shapefile
+    # clip_raster(args.images_dir, clip_from_shp='../data/study_area/study_area.shp')
+    clip_raster(args.images_dir, clip_from_shp='../data/test_region_near/test_region_near.shp')
 
 
 def download_raw(user, pwd, images_dir):

@@ -1,102 +1,103 @@
 import argparse
 import datetime
-from util import *
-from util import get_log_dir, get_logger, merge_shapefiles, get_grid_idx
-from visualization import NVDI_profile, visualize_train_test_grid_split
-from prepare_data import Pipeline, train_test_split, get_spatial_cv_fold
+from spacv.spacv import SKCV
+
+from util import get_log_dir, get_logger
+from visualization import NVDI_profile, visualize_valid_block, visualize_cv
+from prepare_data import clean_train_shapefiles, clean_test_shapefiles, prepare_data
 from models import ModelCropland
+from spatial_cv import ModifiedBlockCV
 
 
-def classifier_cropland(args):
+def cropland_classification(args):
+    testing = True
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
-    logger = get_logger(get_log_dir(), __name__,
-                        f'{log_time}_cropland.log', level='INFO')
+    log_filename = f'cropland_{log_time}.log' if not testing else f'cropland_testing_{log_time}.log'
+    logger = get_logger(get_log_dir(), __name__, log_filename, level='INFO')
     logger.info(args)
-    logger.info('----- Cropland Classification -----')
-    from_dir = args.images_dir + 'clip/'
 
-    # merge all labels
-    merge_shapefiles()
-    logger.info('Merged all labels')
+    logger.info('#### Cropland Classification')
+    train_val_dir = args.images_dir + 'train_area/' if not testing else args.images_dir + 'train_area_sample/'
+    test_dir = args.images_dir + 'test_region_near/' if not testing else args.images_dir + 'test_region_near_sample/'
+
+    # clean shapefiles
+    logger.info('# Clean shapefiles')
+    # TODO: fiona.errors.CRSError: Invalid input to create CRS
+    # clean_train_shapefiles()
+    # clean_test_shapefiles()
+    logger.info('  ok')
 
     # check NDVI profile
-    # ndvi_profile = NVDI_profile(logger, from_dir, '../data/all-labels/all-labels.shp')
+    # ndvi_profile = NVDI_profile(logger, train_val_dir, '../data/labels/labels.shp')
     # ndvi_profile.weekly_profile()
     # ndvi_profile.monthly_profile()
 
-    # follow pipeline
-    pipe = Pipeline(logger, from_dir)
-    df = pipe.pipeline()
-    meta = pipe.meta
-    num_feature = df.columns.shape[0] - 1
-    x = df.iloc[:, :num_feature].values
-    df['grid_idx'] = list(get_grid_idx(args.grid_size, meta['height'], meta['width']).reshape(-1))
-
-    # train val test split
-    if args.dataset_split_by == 'spatial':
-        logger.info('Spatial train-val-test split...')
-        x_train_val, x_test, y_train_val, y_test, grid_idx_train_val, grid_idx_test = \
-            train_test_split(logger, df, df['label'] != 0, num_feature, split_by='spatial',
-                             test_ratio=0.2, random_seed=args.random_seed)
-        data_cv, grid_idx_fold = get_spatial_cv_fold(x_train_val, y_train_val, grid_idx_train_val)
-        visualize_train_test_grid_split(meta, args.grid_size, grid_idx_test, [grid_idx_train_val],
-                                        f'../figs/cropland_{args.grid_size}_train_test_split_{args.random_seed}.tiff')
-        logger.info('Saved train-test visualization.')
-        visualize_train_test_grid_split(meta, args.grid_size, grid_idx_test, grid_idx_fold,
-                                        f'../figs/cropland_{args.grid_size}_train_val_test_split_{args.random_seed}.tiff')
-        logger.info('Saved train-val-test visualization.')
-    else:
-        logger.info('Random train-val-test split...')
-        x_train_val, x_test, y_train_val, y_test, grid_idx_train_val, grid_idx_test = \
-            train_test_split(logger, df, df['label'] != 0, num_feature, split_by='random',
-                             test_ratio=0.2)
-
-    # print
-    feature_names = df.columns[:num_feature]
+    # prepare train/validation/test set
+    df_tv, df_train_val, x_train_val, y_train_val, coords_train_val, scaler, meta, n_feature, feature_names = \
+        prepare_data(logger, dataset='train_val', feature_dir=train_val_dir,
+                     label_path='../data/train_labels/train_labels.shp',
+                     feature_scaling=args.feature_scaling)
+    df_te, df_test, x_test, y_test, _, _, _, _, _ = \
+        prepare_data(logger, dataset='test', feature_dir=test_dir,
+                     label_path='../data/test_labels/test_labels.shp',
+                     feature_scaling=args.feature_scaling, scaler=scaler)
     logger.info(f'\nFeatures: {feature_names}')
-    logger.info(f'  x_train_val.shape {x_train_val.shape}, y_train_val.shape {y_train_val.shape}')
-    logger.info(f'  x_test.shape {x_test.shape}, y_test.shape {y_test.shape}')
+    n_train_val = df_train_val.shape[0]
+    x = df_tv.iloc[:, :n_feature].values
+    if args.feature_scaling is not None:
+        x = scaler.transform(x)
+
+    # cross validation
+    if args.cv_type == 'random':
+        cv = args.n_fold
+    elif args.cv_type == 'block':
+        scv = ModifiedBlockCV(tiles_x=args.tiles_x, tiles_y=args.tiles_y, shape=args.shape, method='random',
+                              buffer_radius=args.buffer_radius, n_groups=args.n_fold, data=x_train_val,
+                              random_state=args.random_state)
+        cv = scv.split(coords_train_val)
+        # visualize valid block
+        _, valid_block, _ = scv.construct_valid_block(coords_train_val)
+        visualize_valid_block(valid_block, meta,
+                              save_path=f'../figs/block_{args.tiles_x}x{args.tiles_y}{args.shape}_{args.n_fold}fold_seed{args.random_state}.tiff')
+    else:  # spatial
+        scv = SKCV(n_splits=args.n_splits, buffer_radius=args.buffer_radius, random_state=args.random_state)
+        cv = scv.split(coords_train_val)
+
+    if args.cv_type != 'random':
+        visualize_cv(scv, coords_train_val, n_train_val, meta,
+                     f'../figs/{args.cv_type}CV_{args.n_fold}fold_seed{args.random_state}.tiff')
 
     # ### models
     # ## SVC
     svc = ModelCropland(logger, log_time, 'svc')
     # # choose from
     # grid search
-    if args.dataset_split_by == 'spatial':
-        svc.find_best_parameters(x_train_val, y_train_val, search_by=args.cv_search_by, cv=data_cv)
-    else:
-        svc.find_best_parameters(x_train_val, y_train_val, search_by=args.cv_search_by)
+    svc.find_best_parameters(x_train_val, y_train_val, search_by=args.hp_search_by, cv=cv, testing=testing)
     svc.fit_and_save_best_model(x_train_val, y_train_val)
     # fit known best parameters
     # svc.fit_and_save_best_model(x_train_val, y_train_val, {'C': 100, 'kernel': 'rbf'})
     # # predict and evaluate
-    svc.predict_and_save(x, meta)
     svc.evaluate(x_test, y_test, feature_names)
+    svc.predict_and_save(x, meta)
 
     # ## RFC
     rfc = ModelCropland(logger, log_time, 'rfc')
     # # choose from
     # grid search
-    if args.dataset_split_by == 'random':
-        rfc.find_best_parameters(x_train_val, y_train_val, search_by=args.cv_search_by)
-    elif args.dataset_split_by == 'spatial':
-        rfc.find_best_parameters(x_train_val, y_train_val, search_by=args.cv_search_by, cv=data_cv)
+    rfc.find_best_parameters(x_train_val, y_train_val, search_by=args.hp_search_by, cv=cv, testing=testing)
     rfc.fit_and_save_best_model(x_train_val, y_train_val)
     # rfc.fit_and_save_best_model(x_train_val, y_train_val,
     #                             {'criterion': 'entropy', 'max_depth': 15, 'max_samples': 0.8, 'n_estimators': 500})
     # predict and evaluate
-    rfc.save_predictions(x, meta)
     rfc.evaluate(x_test, y_test, feature_names)
+    rfc.predict_and_save(x, meta)
 
     # ### MLP
     mlp = ModelCropland(logger, log_time, 'mlp')
     # # # choose from
     # # grid search
-    if args.dataset_split_by == 'random':
-        mlp.find_best_parameters(x_train_val, y_train_val, search_by=args.cv_search_by)
-    elif args.dataset_split_by == 'spatial':
-        mlp.find_best_parameters(x_train_val, y_train_val, search_by=args.cv_search_by, cv=data_cv)
+    mlp.find_best_parameters(x_train_val, y_train_val, search_by=args.hp_search_by, cv=cv, testing=testing)
     mlp.fit_and_save_best_model(x_train_val, y_train_val)
     # # fit known best parameters
     # mlp.fit_and_save_best_model(x_train_val, y_train_val,
@@ -105,8 +106,8 @@ def classifier_cropland(args):
     # # reload pretrained model
     # # rfc.load_pretrained_model('../models/1008-183014_rfc.sav')
     # # # predict and evaluate
-    mlp.save_predictions(x, meta)
     mlp.evaluate(x_test, y_test, feature_names)
+    mlp.predict_and_save(x, meta)
 
     # ### GRU
 
@@ -116,13 +117,22 @@ if __name__ == '__main__':
     parser.add_argument('--images_dir', type=str,
                         default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/',
                         help='Base directory to all the images.')
-    parser.add_argument('--dataset_split_by', type=str, default='spatial', choices=['random', 'spatial'],
-                        help='Method to split train-val-test dataset.')
-    parser.add_argument('--cv_search_by', type=str, default='grid', choices=['random', 'grid'],
-                        help='Method to do cross validation.')
-    parser.add_argument('--grid_size', type=int, default=1000,
-                        help='Size of grid during spatial split.')
-    parser.add_argument('--random_seed', type=int, default=42,
-                        help='Random see for train_test_split.')
+    # cross validation
+    parser.add_argument('--cv_type', type=str, default='block', choices=['random', 'block', 'spatial'],
+                        help='Method of cross validation.')
+    parser.add_argument('--tiles_x', type=int, default=4)
+    parser.add_argument('--tiles_y', type=int, default=4)
+    parser.add_argument('--shape', type=str, default='square')
+    parser.add_argument('--buffer_radius', type=int, default=0)
+    parser.add_argument('--n_fold', type=int, default=3)
+    parser.add_argument('--random_state', type=int, default=42)
+
+    parser.add_argument('--feature_engineering', type=bool, default=True)
+    parser.add_argument('--feature_scaling', type=str, default=None, choices=[None, 'standardize', 'normalize'])
+    # hyper parameter
+    parser.add_argument('--hp_search_by', type=str, default='grid', choices=['random', 'grid'],
+                        help='Method to find hyper-parameters.')
+
     args = parser.parse_args()
-    classifier_cropland(args)
+
+    cropland_classification(args)

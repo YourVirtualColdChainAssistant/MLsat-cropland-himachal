@@ -10,3 +10,4 @@ matplotlib
 sklearn
 scipy
 pulearn
+spacv
