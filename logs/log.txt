@@ -1,3 +1,6 @@
+== cropland_1106-101840.log 
+	+ block cv
+
 == 1023-162137_cropland.log (svc/rfc/mlp + spatial cv + grid search)
 	+ grid_size = 256, random seed = 42
 

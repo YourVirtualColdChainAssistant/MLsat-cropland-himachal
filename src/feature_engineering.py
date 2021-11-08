@@ -71,12 +71,29 @@ def add_bands(logger, img, new_bands_name=['ndvi']):
         return np.append(img, np.stack(new_bands, axis=1), axis=1)
 
 
-def get_raw_monthly(logger, bands_name, num_of_weeks, bands_array):
-    logger.info('Adding raw features...')
+def get_raw_every_n_weeks(logger, bands_name, n_weeks, bands_array, n=4):
+    """
+
+    Parameters
+    ----------
+    logger
+    bands_name: ndarray
+        shape (n_pixels, n_bands, n_weeks)
+    n_weeks
+    bands_array
+
+    Returns
+    -------
+
+    """
+    logger.info(f'Adding raw features every {n} weeks...')
     df_new = pd.DataFrame()
-    for i in np.arange(0, num_of_weeks, 4):
+    for i in np.arange(0, n_weeks, n):
         new_col_name = [n + '_' + str(i + 1) for n in bands_name]
-        df_new[new_col_name] = bands_array[:, :, i]  # fragmented df, please use pd.concat()
+        if n_weeks - i >= n:
+            df_new[new_col_name] = bands_array[:, :, i:i + n].max(axis=2)
+        else:
+            df_new[new_col_name] = bands_array[:, :, i:].max(axis=2)
     logger.info(f'  ok, {df_new.shape[1]} new features are added.')
     return df_new.copy()
 
@@ -92,7 +109,7 @@ def compute_statistics(op, data):
         return 'No corresponding calculation.'
 
 
-def get_statistics_by_band(band_name, num_of_weeks, bands_array):
+def get_statistics_by_band(band_name, bands_array):
     df_new = pd.DataFrame()
     for op in ['avg', 'std', 'max']:
         col_name = band_name + '_' + op
@@ -100,29 +117,29 @@ def get_statistics_by_band(band_name, num_of_weeks, bands_array):
     return df_new
 
 
-def get_statistics(logger, bands_name, num_of_weeks, bands_array):
+def get_statistics(logger, bands_name, bands_array):
     logger.info("Adding statistics...")
     df_new_list = []
     for i, band_name in enumerate(bands_name):
-        df_new_list.append(get_statistics_by_band(band_name, num_of_weeks, bands_array[:, i, :]))
+        df_new_list.append(get_statistics_by_band(band_name, bands_array[:, i, :]))
     df_new = pd.concat(df_new_list, axis=1)
     logger.info(f'  ok, {df_new.shape[1]} new features are added.')
     return df_new.copy()
 
 
-def get_difference_by_band(band_name, num_of_weeks, bands_array):
+def get_difference_by_band(band_name, n_weeks, bands_array):
     df_new = pd.DataFrame()
-    for i in range(1, num_of_weeks):
+    for i in range(1, n_weeks):
         df_new[band_name + '_diff_' + str(i)] = bands_array[:, i] - bands_array[:, i - 1]
         # fragmented df, please use pd.concat()
     return df_new
 
 
-def get_difference(logger, bands_name, num_of_weeks, bands_array):
+def get_difference(logger, bands_name, n_weeks, bands_array):
     logger.info("Adding difference...")
     df_new_list = []
     for i, band_name in enumerate(bands_name):
-        df_new_list.append(get_difference_by_band(band_name, num_of_weeks, bands_array[:, i, :]))
+        df_new_list.append(get_difference_by_band(band_name, n_weeks, bands_array[:, i, :]))
     df_new = pd.concat(df_new_list, axis=1)
     logger.info(f'  ok, {df_new.shape[1]} new features are added.')
     return df_new.copy()

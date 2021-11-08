@@ -192,7 +192,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
 
     :return: bands_array, meta, timestamps_bf, timestamps_af, timestamps_weekly
     bands_array: array
-        shape (pixel, number of bands, number of weeks)
+        shape (n_pixels, n_bands, n_weeks)
     timestamps_bf: the raw timestamps
     """
 
@@ -208,8 +208,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
     # find all the raw time stamps
     timestamps_bf = []
     for filename in filenames:
-        timestamps_bf.append(datetime.datetime.strptime(re.split('[_.]', filename)[-2],
-                                                        '%Y%m%dT%H%M%S%f').date())
+        timestamps_bf.append(datetime.datetime.strptime(re.split('[_.]', filename)[-2], '%Y%m%dT%H%M%S%f').date())
 
     # ### check the way to stack
     if way == 'raw':
@@ -352,7 +351,7 @@ def load_target_shp(path, transform=None, proj_out=None):
                    poly]
     print('Loaded target shape files.')
 
-    return poly, poly_rc, class_type
+    return features, poly, poly_rc, class_type
 
 
 def compute_mask(polygon_list, meta, val_list):

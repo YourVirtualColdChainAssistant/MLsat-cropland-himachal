@@ -45,10 +45,9 @@ class Model(object):
 
         model_search.fit(x_train_val, y_train_val)
         self._logger.info('  ok')
-        self._logger.info(f"\n{model_search.cv_results_}")
-        model_search_name = f'../models/{self.to_name}_{search_by}.csv'
-        save_cv_results(model_search.cv_results_, model_search_name)
-        self._logger.info(f'  Saved {self.model_name.upper()} {search_by} search model to {model_search_name}')
+        # model_search_name = f'../models/{self.to_name}_{search_by}.csv'
+        # save_cv_results(model_search.cv_results_, model_search_name)
+        # self._logger.info(f'  Saved {self.model_name.upper()} {search_by} search results to {model_search_name}')
         self.best_params = model_search.best_params_
         self._logger.info(f"  Best score {model_search.best_score_:.4f} with best parameters: {self.best_params}")
 
@@ -73,9 +72,6 @@ class Model(object):
         y_preds = self.model.predict(x)
         self._logger.info('  ok')
         self._save_predictions(meta, y_preds, to_name)
-
-    def evaluate(self, x_test, y_test):
-        raise NotImplementedError
 
     def load_pretrained_model(self, pretrained_name):
         self._logger.info(f"Loading pretrained {pretrained_name}...")
@@ -117,17 +113,9 @@ class ModelCropland(Model):
         super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv,
                                      n_iter=n_iter, testing=testing)
 
-    def evaluate(self, x_test, y_test, feature_names):
-        self._logger.info('Evaluating by metrics...')
-        self.evaluate_by_metrics(x_test, y_test)
-        self._logger.info('Evaluating by open datasets...')
-        pred_path = f'../preds/{self.to_name}.tiff'
-        self.evaluate_by_open_datasets(pred_path)
-        # self._logger.info('Evaluating by feature importance...')
-        # self.evaluate_by_feature_importance(x_test, y_test, feature_names)
-
     def evaluate_by_metrics(self, x_test, y_test):
-        self._logger.info("Predicting test data...")
+        self._logger.info('Evaluating by metrics...')
+        self._logger.info("  Predicting test data...")
         y_test_pred = self.model.predict(x_test)
         self._logger.info('  ok')
         # !! `labels` is related to the discrete number
@@ -136,6 +124,7 @@ class ModelCropland(Model):
         )
 
     def evaluate_by_feature_importance(self, x_test, y_test, feature_names):
+        self._logger.info('Evaluating by feature importance...')
         model_PI = f'../preds/{self.to_name}_PI.csv'
         permutation_importance_table(self.model, x_test, y_test, feature_names, f'{model_PI}')
         self._logger.info('  ok')
@@ -146,6 +135,7 @@ class ModelCropland(Model):
             self._logger.info(f'  Saved impurity importance to {model_II}')
 
     def evaluate_by_open_datasets(self, pred_path):
+        self._logger.info('Evaluating by open datasets...')
         ancilliary_path = 'K:/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/'
 
         # gfsad
@@ -172,6 +162,11 @@ class ModelCropland(Model):
         align_raster(pred_path, copernicus_clip_path, copernicus_align_path)
         self._logger.info('  Aligned Copernicus dataset to predictions.')
         compare_predictions_with_copernicus(pred_path, copernicus_align_path, self._logger)
+
+    def predict_and_save(self, x, meta, to_name=None):
+        super().predict_and_save(x, meta, to_name)
+        pred_path = f'../preds/{self.to_name}.tiff' if to_name is None else f'../preds/{to_name}.tiff'
+        self.evaluate_by_open_datasets(pred_path)
 
     def load_pretrained_model(self, pretrained_name):
         self._logger.info(f"Loading pretrained {pretrained_name}...")
@@ -309,12 +304,9 @@ class ModelCropSpecific(Model):
         super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by,
                                      cv=cv, testing=testing)
 
-    def evaluate(self, x_test, y_test, feature_names=None):
-        self._logger.info('Evaluating by recall...')
-        self.evaluate_by_recall(x_test, y_test)
-
     def evaluate_by_recall(self, x_test, y_test):
-        self._logger.info("Predicting test data...")
+        self._logger.info('Evaluating by recall...')
+        self._logger.info("  Predicting test data...")
         y_test_pred = self.model.predict(x_test)
         self._logger.info('  ok')
         self._logger.info(f"The best recall is {recall_score(y_test, y_test_pred, average='macro')}")

@@ -40,7 +40,7 @@ def evaluate_by_open_datasets(args):
 
 
 def clip_open_datasets_based_on_study_area(input_path, output_path):
-    study_area_shp = '../data/study-area/study_area.shp'
+    study_area_shp = '../data/train_area/train_area.shp'
     with fiona.open(study_area_shp, "r") as shapefile:
         study_area_shapes = [feature["geometry"] for feature in shapefile if feature["geometry"] is not None]
     study_area_crs = gpd.read_file(study_area_shp).crs

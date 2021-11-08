@@ -146,6 +146,45 @@ def plot_timestamps(timestamps, title=None, save_path=None):
         print(f'Saved time stamps to {save_path}')
 
 
+def plot_smoothed_ndvi_profile(ndvi_array, df_label, timestamps_ref, title=None, save_path=None):
+    """
+    colors:
+    0 - black - no labels
+    1 - red - apples
+    2 - green - other crops
+    3 - blue - non crops
+
+    :param ndvi_array: np.array
+        shape (height * width, ndvi time profile)
+    :return:
+    """
+    _ = plt.subplots(1, 1, figsize=(10, 7))
+    labels = np.unique(df_label)
+    print(f"labels = {labels}")
+    colors_map = {0: 'black', 1: 'tab:red', 2: 'tab:green', 3: 'tab:brown'}
+    labels_map = {0: 'no data', 1: 'apples', 2: 'other crops', 3: 'non crops'}
+
+    mean_df = pd.DataFrame()
+    for label in labels:
+        mean = ndvi_array[df_label == label].mean(axis=0)
+        std = ndvi_array[df_label == label].std(axis=0)
+        plt.plot(timestamps_ref, mean, color=colors_map[label], label=labels_map[label])
+        plt.fill_between(timestamps_ref, mean - std, mean + std, color=colors_map[label], alpha=0.2)
+        mean_df['mean_' + str(label)] = mean
+        mean_df['std_' + str(label)] = std
+    plt.legend(loc='best')
+    plt.xlabel('Time')
+    plt.ylabel('NDVI')
+    if title is not None:
+        plt.title(title)
+        mean_df.to_csv(f'../figs/{title}.csv', index=False)
+    else:
+        mean_df.to_csv('../figs/NDVI_profile.csv', index=False)
+    if save_path is not None:
+        plt.savefig(save_path)
+        print(f'Saved ndvi profile to {save_path}')
+
+
 def plot_ndvi_profile(ndvi_array, train_mask, timestamps_ref, title=None, save_path=None):
     """
     colors:
@@ -162,7 +201,7 @@ def plot_ndvi_profile(ndvi_array, train_mask, timestamps_ref, title=None, save_p
     labels = np.unique(train_mask)
     print(f"labels = {labels}")
     colors_map = {0: 'black', 1: 'tab:red', 2: 'tab:green', 3: 'tab:brown'}
-    labels_map = {0: 'no labels', 1: 'apples', 2: 'other crops', 3: 'non crops'}
+    labels_map = {0: 'no data', 1: 'apples', 2: 'other crops', 3: 'non crops'}
     mean_df = pd.DataFrame()
     for label in labels:
         mean = ndvi_array[train_mask == label].mean(axis=0)
@@ -287,34 +326,39 @@ class NVDI_profile(object):
         return ndvi_array_eql, timestamps_af, timestamps_ref
 
 
-def visualize_valid_block(valid_block, meta, save_path, cmap='Set2'):
-    iter_shapes = iter([(shapely.geometry.mapping(polygon), value + 1) for polygon, value in
-                        zip(valid_block.loc[:, 'geometry'], valid_block.loc[:, 'grid_id'])])
-    img = rasterio.features.rasterize(iter_shapes, out_shape=(meta['height'], meta['width']))
+def visualize_cv_fold(grid, meta, save_path):
+    shapes = iter([(shapely.geometry.mapping(poly), v + 1) for poly, v in zip(grid.geometry, grid.fold_id)])
+    fold_img = rasterio.features.rasterize(shapes, out_shape=(meta['height'], meta['width']),
+                                           transform=meta['transform'])
     out_meta = meta.copy()
     out_meta.update(count=1, dtype=rasterio.uint8)
-    write_1_band_raster(img, out_meta, save_path)
+    write_1_band_raster(fold_img, out_meta, save_path)
 
 
-def visualize_cv(scv, train_val_coords, n_train_val, meta, save_path):
+def visualize_cv_polygons(scv, train_val_coords, meta, save_path):
     excluded_indices = []
-    all_indices = np.arange(n_train_val)
+    all_indices = np.arange(train_val_coords.shape[0])
     # construct the image
     img = np.zeros((meta['height'], meta['width']), dtype=int)
     for i, (train_indice, val_indice) in enumerate(scv.split(train_val_coords), start=1):
         # each fold is a color
-        xs = train_val_coords[val_indice].apply(lambda x: x.coords[:][0][1]).to_numpy().astype(int)
-        ys = train_val_coords[val_indice].apply(lambda x: x.coords[:][0][0]).to_numpy().astype(int)
-        img[xs, ys] = i
+        xs = train_val_coords.loc[val_indice, 'geometry'].apply(lambda x: x.coords[:][0][0]).to_numpy()
+        ys = train_val_coords.loc[val_indice, 'geometry'].apply(lambda x: x.coords[:][0][1]).to_numpy()
+        rows, cols = rasterio.transform.rowcol(meta['transform'], xs, ys)
+        img[rows, cols] = i
+        print(f'  fold {i} = {i}')
         excluded_indices.append(list(set(all_indices) - set(train_indice) - set(val_indice)))
     excluded_indices = list(itertools.chain.from_iterable(excluded_indices))
     # excluded points is another color
-    xs = train_val_coords[excluded_indices].apply(lambda x: x.coords[:][0][1]).to_numpy().astype(int)
-    ys = train_val_coords[excluded_indices].apply(lambda x: x.coords[:][0][0]).to_numpy().astype(int)
-    img[xs, ys] = i + 1
+    if len(excluded_indices) != 0:
+        xs = train_val_coords.loc[excluded_indices, 'geometry'].apply(lambda x: x.coords[:][0][0]).to_numpy()
+        ys = train_val_coords.loc[excluded_indices, 'geometry'].apply(lambda x: x.coords[:][0][1]).to_numpy()
+        rows, cols = rasterio.transform.rowcol(meta['transform'], xs, ys)
+        img[rows, cols] = i + 1
+        print(f'  Excluded points = {i + 1}')
     # save new raster
     out_meta = meta.copy()
-    out_meta.update(dtype=rasterio.uint8, count=1, compress='lzw')
+    out_meta.update(dtype=rasterio.uint8, count=1)
     write_1_band_raster(img, out_meta, save_path)
 
 
