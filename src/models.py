@@ -14,10 +14,11 @@ from pulearn import ElkanotoPuClassifier, WeightedElkanotoPuClassifier
 
 
 class Model(object):
-    def __init__(self, logger, log_time, model_name):
+    def __init__(self, logger, log_time, model_name, random_state):
         self._logger = logger
         self._log_time = log_time
         self.model_name = model_name
+        self.random_state = random_state
         self.to_name = f'{self._log_time}_{self.model_name}'
         self.best_params = None
         self.model = None
@@ -52,17 +53,24 @@ class Model(object):
         self._logger.info(f"  Best score {model_search.best_score_:.4f} with best parameters: {self.best_params}")
 
     def fit_and_save_best_model(self, x_train_val, y_train_val, best_params=None):
+        # determin the best parameters
         if best_params is not None:
             self.best_params = best_params
         if self.best_params is None:
             raise ValueError('No best parameters are specified.')
+
+        # fit model
         self._logger.info(f"Fitting the best {self.model_name.upper()} with {self.best_params}...")
         self.model = self._get_best_model()
         if self.model_name == 'ocsvm':
             self.model.fit(x_train_val)
         else:
             self.model.fit(x_train_val, y_train_val)
-        self._logger.info('  ok')
+
+        # score training
+        self._logger.info(f'  Fitted accuracy: {self.model.score(x_train_val, y_train_val):.4f}')
+
+        # save model
         model_name = f'../models/{self.to_name}.pkl'
         pickle.dump(self.model, open(model_name, 'wb'))
         self._logger.info(f'  Saved the best {self.model_name.upper()} to {model_name}')
@@ -96,9 +104,9 @@ class Model(object):
 
 
 class ModelCropland(Model):
-    def __init__(self, logger, log_time, model_name, pretrained_name=None):
+    def __init__(self, logger, log_time, model_name, random_state, pretrained_name=None):
         # inherent from parent
-        super().__init__(logger, log_time, model_name)
+        super().__init__(logger, log_time, model_name, random_state)
         self._check_model_name(model_list=['svc', 'rfc', 'mlp', 'gru'])
         # load pretrained
         if pretrained_name is not None:
@@ -180,13 +188,15 @@ class ModelCropland(Model):
                 model_params_list = dict(
                     C=[0.5, 1, 10, 100],
                     gamma=['scale', 'auto'],
-                    kernel=['poly', 'rbf']
+                    kernel=['poly', 'rbf'],
+                    random_state=[self.random_state]
                 )
             else:
                 model_params_list = dict(
                     C=[1],
                     gamma=['scale'],
-                    kernel=['rbf']
+                    kernel=['rbf'],
+                    random_state=[self.random_state]
                 )
         elif self.model_name == 'rfc':
             model_base = RandomForestClassifier()
@@ -195,14 +205,16 @@ class ModelCropland(Model):
                     n_estimators=[100, 300, 500],
                     criterion=['gini', 'entropy'],
                     max_depth=[5, 10, 15],
-                    max_samples=[0.5, 0.8, 1]
+                    max_samples=[0.5, 0.8, 1],
+                    random_state=[self.random_state]
                 )
             else:
                 model_params_list = dict(
                     n_estimators=[100],
                     criterion=['gini'],
                     max_depth=[5],
-                    max_samples=[0.8]
+                    max_samples=[0.8],
+                    random_state=[self.random_state]
                 )
         elif self.model_name == 'mlp':
             model_base = MLPClassifier()
@@ -212,7 +224,8 @@ class ModelCropland(Model):
                     alpha=[0.0001, 0.0005, 0.001, 0.005],
                     max_iter=[200, 500],
                     activation=['relu'],
-                    early_stopping=[True]
+                    early_stopping=[True],
+                    random_state=[self.random_state]
                 )
             else:
                 model_params_list = dict(
@@ -220,7 +233,8 @@ class ModelCropland(Model):
                     alpha=[0.0001],
                     max_iter=[200],
                     activation=['relu'],
-                    early_stopping=[True]
+                    early_stopping=[True],
+                    random_state=[self.random_state]
                 )
         else:
             model_base = None
@@ -235,7 +249,8 @@ class ModelCropland(Model):
             model_params_dist = dict(
                 C=loguniform(0.1, 100),
                 gamma=['scale', 'auto'],
-                kernel=['poly', 'rbf']
+                kernel=['poly', 'rbf'],
+                random_state=[self.random_state]
             )
         elif self.model_name == 'rfc':
             model_base = RandomForestClassifier()
@@ -243,7 +258,8 @@ class ModelCropland(Model):
                 n_estimators=randint(100, 1000),
                 criterion=['gini', 'entropy'],
                 max_depth=randint(5, 15),
-                max_samples=uniform(0.5, 0.5)  # uniform(loc, scale) -> a=loc, b=loc+scale
+                max_samples=uniform(0.5, 0.5),  # uniform(loc, scale) -> a=loc, b=loc+scale
+                random_state=[self.random_state]
             )
         elif self.model_name == 'mlp':
             model_base = MLPClassifier()
@@ -252,7 +268,8 @@ class ModelCropland(Model):
                 alpha=loguniform(0.0001, 0.001),
                 max_iter=randint(200, 500),
                 activation=['relu'],
-                early_stopping=[True]
+                early_stopping=[True],  # uniform(loc, scale) -> a=loc, b=loc+scale
+                random_state=[self.random_state]
             )
         else:
             model_base = None
@@ -266,14 +283,16 @@ class ModelCropland(Model):
             model = SVC(
                 C=self.best_params['C'],
                 gamma=self.best_params['gamma'],
-                kernel=self.best_params['kernel']
+                kernel=self.best_params['kernel'],
+                random_state=self.random_state
             )
         elif self.model_name == 'rfc':
             model = RandomForestClassifier(
                 n_estimators=self.best_params['n_estimators'],
                 criterion=self.best_params['criterion'],
                 max_depth=self.best_params['max_depth'],
-                max_samples=self.best_params['max_samples']
+                max_samples=self.best_params['max_samples'],
+                random_state=self.random_state
             )
         elif self.model_name == 'mlp':
             model = MLPClassifier(
@@ -281,7 +300,8 @@ class ModelCropland(Model):
                 alpha=self.best_params['alpha'],
                 max_iter=self.best_params['max_iter'],
                 activation=self.best_params['activation'],
-                early_stopping=self.best_params['early_stopping']
+                early_stopping=self.best_params['early_stopping'],
+                random_state=self.random_state
             )
         else:
             model = None
@@ -289,9 +309,9 @@ class ModelCropland(Model):
 
 
 class ModelCropSpecific(Model):
-    def __init__(self, logger, log_time, model_name, pretrained_name=None):
+    def __init__(self, logger, log_time, model_name, random_state, pretrained_name=None):
         # inherent from parent
-        super().__init__(logger, log_time, model_name)
+        super().__init__(logger, log_time, model_name, random_state)
         self._check_model_name(model_list=['ocsvm', 'pul', 'pul-w'])
         # add pretrained_name and base model
         if pretrained_name is None:

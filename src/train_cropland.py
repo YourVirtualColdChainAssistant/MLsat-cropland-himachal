@@ -46,30 +46,33 @@ def cropland_classification(args):
     x = df_tv.iloc[:, :n_feature].values
     if args.feature_scaling is not None:
         x = scaler.transform(x)
+        logger.info('Transformed all x')
 
     # cross validation
     if args.cv_type == 'random':
         cv = args.n_fold
     elif args.cv_type == 'block':
         # assign to fold
-        # TODO: change grid assignment, to make sure each fold is more or less balanced
         grid = construct_grid_to_fold(polygons, tiles_x=args.tiles_x, tiles_y=args.tiles_y, shape=args.shape,
                                       data=x_train_val, n_fold=args.n_fold, random_state=args.random_state)
         scv = ModifiedBlockCV(custom_polygons=grid, buffer_radius=args.buffer_radius)
         # visualize valid block
-        visualize_cv_fold(grid, meta,
-                          save_path=f'../figs/cv_{args.tiles_x}x{args.tiles_y}{args.shape}_{args.n_fold}fold_seed{args.random_state}.tiff')
+        cv_name = f'../figs/cv_{args.tiles_x}x{args.tiles_y}{args.shape}_f{args.n_fold}_s{args.random_state}'
+        logger.info(f'Saving cv block to {cv_name}.tiff')
+        visualize_cv_fold(grid, meta, cv_name + '.tiff')
+        logger.info(f' ok')
     else:  # spatial
-        scv = SKCV(n_splits=args.n_splits, buffer_radius=args.buffer_radius, random_state=args.random_state)
+        scv = SKCV(n_splits=args.n_fold, buffer_radius=args.buffer_radius, random_state=args.random_state)
+        cv_name = f'../figs/cv_{args.cv_type}_f{args.n_fold}_s{args.random_state}'
 
     if args.cv_type != 'random':
-        visualize_cv_polygons(scv, coords_train_val, meta,
-                              f'../figs/cv_{args.cv_type}_{args.n_fold}fold_seed{args.random_state}.tiff')
+        logger.info(f'Saving cv polygons to {cv_name}_mask.tiff')
+        visualize_cv_polygons(scv, coords_train_val, meta, cv_name + '_mask.tiff')
+        logger.info(f' ok')
 
-    # TODO: add accuracy of training set, and add score of test set
     # ### models
     # ## SVC
-    # svc = ModelCropland(logger, log_time, 'svc', '1106-101840_svc')
+    # svc = ModelCropland(logger, log_time, 'svc', args.random_state, '1106-101840_svc')
     # # choose from
     # grid search
     # if args.cv_type != 'random':
@@ -84,7 +87,7 @@ def cropland_classification(args):
     # svc.evaluate_by_feature_importance(x_test, y_test, feature_names)
 
     # ## RFC
-    rfc = ModelCropland(logger, log_time, 'rfc')
+    rfc = ModelCropland(logger, log_time, 'rfc', args.random_state)
     # # choose from
     # grid search
     if args.cv_type != 'random':
@@ -99,7 +102,7 @@ def cropland_classification(args):
     # rfc.evaluate_by_feature_importance(x_test, y_test, feature_names)
 
     # ### MLP
-    mlp = ModelCropland(logger, log_time, 'mlp')
+    mlp = ModelCropland(logger, log_time, 'mlp', args.random_state)
     # # # choose from
     # # grid search
     if args.cv_type != 'random':
@@ -126,18 +129,18 @@ if __name__ == '__main__':
                         default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/',
                         help='Base directory to all the images.')
     # cross validation
-    parser.add_argument('--cv_type', type=str, default='block', choices=['random', 'block', 'spatial'],
+    parser.add_argument('--cv_type', type=str, default='spatial', choices=['random', 'block', 'spatial'],
                         help='Method of cross validation.')
-    parser.add_argument('--tiles_x', type=int, default=5)
-    parser.add_argument('--tiles_y', type=int, default=5)
+    parser.add_argument('--tiles_x', type=int, default=4)
+    parser.add_argument('--tiles_y', type=int, default=4)
     parser.add_argument('--shape', type=str, default='square')
     parser.add_argument('--buffer_radius', type=int, default=0)  # TODO: buffer changes to meter
     parser.add_argument('--n_fold', type=int, default=3)
-    parser.add_argument('--random_state', type=int, default=42)
+    parser.add_argument('--random_state', type=int, default=24)
 
     parser.add_argument('--vis_ts', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)
-    parser.add_argument('--feature_engineering', type=bool, default=True)
+    parser.add_argument('--feature_engineering', type=bool, default=False)
     parser.add_argument('--feature_scaling', type=str, default=None, choices=[None, 'standardize', 'normalize'])
     # hyper parameter
     parser.add_argument('--hp_search_by', type=str, default='grid', choices=['random', 'grid'],

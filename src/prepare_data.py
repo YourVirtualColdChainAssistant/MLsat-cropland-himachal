@@ -19,7 +19,7 @@ from feature_engineering import add_bands, get_raw_every_n_weeks, get_statistics
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from spacv.utils import geometry_to_2d
 from sklearn.neighbors import BallTree
-from spacv.grid_builder import construct_grid, assign_randomized, assign_systematic, assign_optimized_random
+from spacv.grid_builder import construct_grid, assign_systematic, assign_optimized_random
 from visualization import plot_smoothed_ndvi_profile
 
 
@@ -202,16 +202,8 @@ def construct_valid_grid(polygons_geo, tiles_x, tiles_y, shape):
     polygons_gpd = gpd.GeoDataFrame([shapely.geometry.shape(poly) for poly in polygons_geo], columns=['geometry'])
     grid_all = construct_grid(polygons_gpd, tiles_x=tiles_x, tiles_y=tiles_y, shape=shape)
     grid_all['grid_id'] = grid_all.index
-    polygons_gpd = assign_polygons_to_grid(polygons_gpd, grid_all)  # columns=[geometry, grid_id]
+    polygons_gpd, grid_all = assign_polygons_to_grid(polygons_gpd, grid_all)  # columns=[geometry, grid_id]
     grid_valid = grid_all.loc[sorted(polygons_gpd.grid_id.unique().astype(int)), :].reset_index(drop=True)
-
-    # for g_id in grid_valid.grid_id:
-    #     grid_valid.loc[g_id, 'geometry'] = grid_valid.loc[g_id, 'geometry'].union(
-    #         polygons_gpd.geometry[polygons_gpd.grid_id.values == g_id].unary_union)
-    #     grid_valid.loc[grid_valid.grid_id.values != g_id, 'geometry'] = grid_valid.loc[
-    #         grid_valid.grid_id.values != g_id, 'geometry'].difference(
-    #         polygons_gpd.geometry[polygons_gpd.grid_id.values != g_id].unary_union)
-
     return polygons_gpd, grid_valid
 
 
@@ -239,14 +231,13 @@ def assign_polygons_to_grid(polygons, grid, distance_metric='euclidean', random_
         grid_id = grid.loc[grid_id, 'grid_id'].values
         polygons.loc[border_polygon_index, 'grid_id'] = grid_id
 
-    # update grid shape
-    # for poly, grid_id in zip(polygons[border_polygon_index].geometry, polygons[border_polygon_index].grid_id):
-    #     # !!Q 1) multipolygon produced by making difference,
-    #     # 2) ValueError: Must have equal len keys and value when setting with an iterable
-    #     grid.loc[grid_id, 'geometry'] = grid.loc[grid_id, 'geometry'].union(poly)
-    #     grid.loc[grid.grid_id.values != grid_id, 'geometry'] = \
-    #         grid.loc[grid.grid_id.values != grid_id, 'geometry'].difference(poly)
-    return polygons
+    # update grid shape, not split polygons
+    for poly, grid_id in zip(polygons[border_polygon_index].geometry, polygons[border_polygon_index].grid_id):
+        grid.loc[grid.grid_id.values == grid_id, 'geometry'] = \
+            grid.loc[grid.grid_id.values == grid_id, 'geometry'].union(poly)
+        grid.loc[grid.grid_id.values != grid_id, 'geometry'] = \
+            grid.loc[grid.grid_id.values != grid_id, 'geometry'].difference(poly)
+    return polygons, grid
 
 
 def assign_grid_to_fold(polygons, grid, tiles_x, tiles_y, method='random', shape='square',
@@ -269,7 +260,22 @@ def assign_grid_to_fold(polygons, grid, tiles_x, tiles_y, method='random', shape
 
 
 def assign_random(grid, n_fold, random_state):
-    pass
+    random.seed(random_state)
+
+    n_grids = grid.shape[0]
+    n_reps = math.floor(n_grids / n_fold)
+
+    idx = np.arange(n_grids)
+    random.shuffle(idx)
+
+    val = np.repeat(np.arange(n_fold), n_reps)
+    for _ in range(n_grids - val.shape[0]):
+        val = np.insert(val, -1, n_fold - 1, axis=0)
+
+    grid_id = np.empty(n_grids).astype(int)
+    grid_id[idx] = val
+
+    return grid_id
 
 
 # def construct_fold(grid):

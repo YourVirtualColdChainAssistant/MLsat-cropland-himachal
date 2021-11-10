@@ -7,7 +7,6 @@ from spacv.utils import convert_geoseries
 from spacv.spacv import UserDefinedSCV
 
 
-# TODO: prepare_data didn't split polygons at boundary, but ModifiedBlockCV.split based on grid (including buffer)...
 class ModifiedBlockCV(UserDefinedSCV):
     def _iter_test_indices(self, XYs):
         """

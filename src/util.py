@@ -480,3 +480,22 @@ def save_cv_results(res, save_path):
     df['std_test_score'] = res['std_test_score']
     df['rank_test_score'] = res['rank_test_score']
     df.to_csv(save_path, index=False)
+
+
+def convert_gml_to_shp(safe_dir, cloud_dir):
+    safe_names = os.listdir(safe_dir)
+
+    print('Converting cloud mask from gml to shp ...')
+    for i, safe_name in enumerate(safe_names, start=1):
+        filename = os.listdir(safe_dir + safe_name + '/GRANULE/')[0]
+        gml_path = safe_dir + safe_name + '/GRANULE/' + filename + '/QI_DATA/MSK_CLOUDS_B00.gml'
+        if not os.path.exists(cloud_dir + filename):
+            os.mkdir(cloud_dir + filename)
+        cloud_path = cloud_dir + filename + '/cloud_mask.shp'
+        cmd = f'ogr2ogr -f "ESRI Shapefile" {cloud_path} {gml_path}'
+        returned = os.system(cmd)
+        if returned == 0:
+            print(f'[{i}/{len(safe_names)}] {cloud_path} ')
+        else:
+            print(f'{safe_name} failed / empty')
+    print(f'  ok')

@@ -4,21 +4,24 @@ import glob
 import shutil
 import zipfile
 import argparse
-
+import shapely
+import numpy as np
+import geopandas as gpd
 from sentinelsat import SentinelAPI
 
 import rasterio
 from rasterio.io import MemoryFile
 from rasterio.merge import merge
 
-from util import clip_raster
+from util import clip_raster, convert_gml_to_shp
 
 
 def main(args):
     # download_raw(args.user, args.password, args.images_dir)
-    # process_raw(args.images_dir)
+    process_raw(args.images_dir)
     # clip_raster(args.images_dir, clip_from_shp='../data/study_area/study_area.shp')
-    clip_raster(args.images_dir, clip_from_shp='../data/test_region_near/test_region_near.shp')
+    # clip_raster(args.images_dir, clip_from_shp='../data/train_region/train_region.shp')
+    # clip_raster(args.images_dir, clip_from_shp='../data/test_region_near/test_region_near.shp')
 
 
 def download_raw(user, pwd, images_dir):
@@ -54,29 +57,34 @@ def download_raw(user, pwd, images_dir):
 
 
 def process_raw(images_dir):
-    # unzip files
     raw_dir = images_dir + 'raw/'
+    safe_dir = images_dir + 'safe/'
+    cloud_dir = images_dir + 'cloud_mask/'
+    corrected_dir = images_dir + 'corrected/'
+    geotiff_dir = images_dir + 'geotiff/'
     if not os.path.exists(raw_dir):
         os.mkdir(raw_dir)
-    # raw safe files
-    safe_dir = images_dir + 'safe/'
     if not os.path.exists(safe_dir):
         os.mkdir(safe_dir)
-    # unzip_products(raw_dir, safe_dir)
-
-    # sen2cor
-    corrected_dir = images_dir + 'corrected/'
+    if not os.path.exists(cloud_dir):
+        os.mkdir(cloud_dir)
     if not os.path.exists(corrected_dir):
         os.mkdir(corrected_dir)
-    # absolute path to call sen2cor
-    sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
-    atmospheric_correction(sen2cor_path, safe_dir, corrected_dir)
-
-    # merge to single raster
-    geotiff_dir = images_dir + 'geotiff/'
     if not os.path.exists(geotiff_dir):
         os.mkdir(geotiff_dir)
-    merge2single_raster(corrected_dir, geotiff_dir)
+
+    # unzip files
+    # unzip_products(raw_dir, safe_dir)
+
+    # cloud mask
+    # convert_gml_to_shp(safe_dir, cloud_dir)
+
+    # sen2cor
+    # sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
+    # atmospheric_correction(sen2cor_path, safe_dir, corrected_dir)  # absolute path to call sen2cor
+
+    # merge to single raster
+    merge_to_raster(corrected_dir, geotiff_dir, cloud_dir)
 
 
 def unzip_products(raw_dir, safe_dir):
@@ -137,7 +145,7 @@ def is_corrected(safe_dir_to_correct, corrected_dir):
     return False
 
 
-def to_single_raster(input_dir, output_dir):
+def to_single_raster(input_dir, output_dir, cloud_mask_dir):
     """ Convert a folder of multiple geotiff images as a single multi-band geotiff
             INPUT : input_dir (str) -> path to the input folder as (path_to_folder/../*.tiff)
                     output_dir (str) -> path to where the geotiff will be saved (path_to_folder/../image_name.tiff)
@@ -145,29 +153,41 @@ def to_single_raster(input_dir, output_dir):
         """
     # order is fixed by `sorted`
     file_path = [f for f in sorted(glob.glob(input_dir))]
+    cloud_legend = {'CLOUDLESS': 0, 'OPAQUE': 1, 'CIRRUS': 2}
     # Read metadata of first file
     with rasterio.open(file_path[0]) as src0:
         meta = src0.meta
     # Update meta to reflect the number of layers
-    meta.update(count=len(file_path))
+    meta.update(count=len(file_path) + 1)
     # Read each layer and write it to stack
     with rasterio.open(output_dir, 'w', **meta) as dst:
         for i, path in enumerate(file_path, start=1):
             with rasterio.open(path) as src1:
                 dst.write_band(i, src1.read(1))
+        if os.path.exists(cloud_mask_dir):
+            cloud_shp = gpd.read_file(cloud_mask_dir)
+            shapes = iter([(shapely.geometry.mapping(poly), cloud_legend[v]) for poly, v in
+                           zip(cloud_shp.geometry, cloud_shp.maskType)])
+            cloud_img = rasterio.features.rasterize(shapes, out_shape=(meta['height'], meta['width']),
+                                                    transform=meta['transform'])
+        else:  # cloud_mask_dir is empty (converting from gml failed or the whole tile is cloudless)
+            cloud_img = np.zeros((meta['height'], meta['width']))
+        dst.write_band(i + 1, cloud_img)
 
 
-def merge2single_raster(corrected_dir, geotiff_dir):
+def merge_to_raster(corrected_dir, geotiff_dir, cloud_dir):
     file_paths = [f for f in os.listdir(corrected_dir)]
-    print('\nStart merging raster...')
+    print('Merging raster...')
     # save to single geotiff
     for i, file_path in enumerate(file_paths, start=1):
         input_dir = corrected_dir + file_path + '/GRANULE/'
         file_name = os.listdir(input_dir)[0]
         input_dir += file_name + '/IMG_DATA/R10m/*_B*.jp2'
         output_dir = geotiff_dir + file_name + '.tiff'
-        to_single_raster(input_dir, output_dir)
+        cloud_mask_dir = cloud_dir + 'L1C' + file_name.lstrip('L2A') + '/cloud_mask.shp'
+        to_single_raster(input_dir, output_dir, cloud_mask_dir)
         print(f'[{i}/{len(file_paths)}] merged {output_dir}')
+    print('Merge done!')
 
 
 def mask_raster(tiff_name, proj=None):
