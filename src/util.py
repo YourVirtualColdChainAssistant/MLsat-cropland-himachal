@@ -34,24 +34,15 @@ def load_geotiff(path, window=None):
     return band, meta
 
 
-def upsampling_20m_to_10m():
-    pass
-
-
-def split_raster():
-    pass
-
-
-def clip_raster(images_dir, clip_from_shp='../data/study_area/study_area.shp'):
+def clip_raster(img_dir, clip_from_shp):
     # shape file information
     with fiona.open(clip_from_shp, "r") as shapefile:
         shapes = [feature["geometry"] for feature in shapefile if feature["geometry"] is not None]
     shape_crs = gpd.read_file(clip_from_shp).crs
 
-    # geotiff directory
-    geotiff_dir = images_dir + 'geotiff/'
-    # clip directory
-    clip_dir = images_dir + clip_from_shp.split('/')[2] + '/'
+    # check directory
+    geotiff_dir = img_dir + 'geotiff/'
+    clip_dir = img_dir + clip_from_shp.split('/')[2] + '/'
     if not os.path.exists(clip_dir):
         os.mkdir(clip_dir)
 
@@ -89,8 +80,9 @@ def clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath):
     raster = rasterio.open(geotiff_filepath)
 
     # check if two coordinate systems are the same
+    # TODO: check if we re-project shp.crs to raster.crs
     if shape_crs != raster.crs:
-        reproject_single_raster(shape_crs, geotiff_filepath, clip_filepath)
+        reproject_single_raster(raster.crs, geotiff_filepath, clip_filepath)
         # read imagery file
         with rasterio.open(clip_filepath) as src:
             out_image, out_transform = mask(src, shapes, crop=True)
@@ -112,25 +104,25 @@ def clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath):
         dst.write(out_image)
 
 
-def reproject_single_raster(dst_crs, input_file, transformed_file):
+def reproject_single_raster(dst_crs, in_path, out_path):
     """
     :param dst_crs: output projection system
-    :param input_file
-    :param transformed_file
+    :param in_path
+    :param out_path
     :return:
     """
-    with rasterio.open(input_file) as imagery:
-        transform, width, height = calculate_default_transform(imagery.crs, dst_crs, imagery.width, imagery.height,
-                                                               *imagery.bounds)
-        kwargs = imagery.meta.copy()
-        kwargs.update({'crs': dst_crs, 'transform': transform, 'width': width, 'height': height})
-        with rasterio.open(transformed_file, 'w', **kwargs) as dst:
-            for i in range(1, imagery.count + 1):
+    with rasterio.open(in_path) as src:
+        src_crs = src.crs
+        transform, width, height = calculate_default_transform(src_crs, dst_crs, src.width, src.height, *src.bounds)
+        out_meta = src.meta.copy()
+        out_meta.update({'crs': dst_crs, 'transform': transform, 'width': width, 'height': height})
+        with rasterio.open(out_path, 'w', **out_meta) as dst:
+            for i in range(1, src.count + 1):
                 reproject(
-                    source=rasterio.band(imagery, i),
+                    source=rasterio.band(src, i),
                     destination=rasterio.band(dst, i),
-                    src_transform=imagery.transform,
-                    src_crs=imagery.crs,
+                    src_transform=src.transform,
+                    src_crs=src.crs,
                     dst_transform=transform,
                     dst_crs=dst_crs,
                     resampling=Resampling.nearest)
@@ -141,8 +133,7 @@ def timestamp_sanity_check(timestamp_std, filename):
                                                '%Y%m%dT%H%M%S%f').date()
     timestamp_get = timestamp_get - datetime.timedelta(days=timestamp_get.weekday())
     if timestamp_std != timestamp_get:
-        print(f'{timestamp_std} and {timestamp_get} do not match!')
-        exit()
+        raise ValueError(f'{timestamp_std} and {timestamp_get} do not match!')
 
 
 def choices_sanity_check(choices, choice, var_name):
@@ -246,7 +237,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
 
         # stack by index
         if len(band_list) != 0:
-            band_list = np.stack(band_list, axis=2).max(axis=2)
+            band_list = np.stack(band_list, axis=2).max(axis=2)  # take max
         elif interpolation == 'zero' or i == 1:
             band_list = np.zeros((meta['height'] * meta['width'], meta['count']))
         else:
@@ -299,8 +290,7 @@ def save_predictions_geotiff(meta_src, predictions, save_path):
         out_meta = meta_src.copy()
         out_meta.update(
             dtype=rasterio.uint8,
-            count=1,
-            compress='lzw')
+            count=1)
         with rasterio.open(save_path, 'w', **out_meta) as dst:
             # reshape into (band, height, width)
             dst.write(predictions.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
@@ -482,20 +472,5 @@ def save_cv_results(res, save_path):
     df.to_csv(save_path, index=False)
 
 
-def convert_gml_to_shp(safe_dir, cloud_dir):
-    safe_names = os.listdir(safe_dir)
-
-    print('Converting cloud mask from gml to shp ...')
-    for i, safe_name in enumerate(safe_names, start=1):
-        filename = os.listdir(safe_dir + safe_name + '/GRANULE/')[0]
-        gml_path = safe_dir + safe_name + '/GRANULE/' + filename + '/QI_DATA/MSK_CLOUDS_B00.gml'
-        if not os.path.exists(cloud_dir + filename):
-            os.mkdir(cloud_dir + filename)
-        cloud_path = cloud_dir + filename + '/cloud_mask.shp'
-        cmd = f'ogr2ogr -f "ESRI Shapefile" {cloud_path} {gml_path}'
-        returned = os.system(cmd)
-        if returned == 0:
-            print(f'[{i}/{len(safe_names)}] {cloud_path} ')
-        else:
-            print(f'{safe_name} failed / empty')
-    print(f'  ok')
+def mosaic():
+    pass

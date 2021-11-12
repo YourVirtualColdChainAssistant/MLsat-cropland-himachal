@@ -107,7 +107,7 @@ class ModelCropland(Model):
     def __init__(self, logger, log_time, model_name, random_state, pretrained_name=None):
         # inherent from parent
         super().__init__(logger, log_time, model_name, random_state)
-        self._check_model_name(model_list=['svc', 'rfc', 'mlp', 'gru'])
+        self._check_model_name(model_list=['svc', 'rfc', 'mlp'])
         # load pretrained
         if pretrained_name is not None:
             self._logger.info(f'Changed log time from {log_time} to {pretrained_name.split("_")[0]}')
@@ -216,7 +216,7 @@ class ModelCropland(Model):
                     max_samples=[0.8],
                     random_state=[self.random_state]
                 )
-        elif self.model_name == 'mlp':
+        else:  # self.model_name == 'mlp':
             model_base = MLPClassifier()
             if not testing:
                 model_params_list = dict(
@@ -236,9 +236,6 @@ class ModelCropland(Model):
                     early_stopping=[True],
                     random_state=[self.random_state]
                 )
-        else:
-            model_base = None
-            model_params_list = None
         self._logger.info(f'  model base {model_base}')
         self._logger.info(f'  model parameters list {model_params_list}')
         return model_base, model_params_list
@@ -261,7 +258,7 @@ class ModelCropland(Model):
                 max_samples=uniform(0.5, 0.5),  # uniform(loc, scale) -> a=loc, b=loc+scale
                 random_state=[self.random_state]
             )
-        elif self.model_name == 'mlp':
+        else:  # self.model_name == 'mlp':
             model_base = MLPClassifier()
             model_params_dist = dict(
                 hidden_layer_sizes=[(100,), (300,)],
@@ -271,9 +268,6 @@ class ModelCropland(Model):
                 early_stopping=[True],  # uniform(loc, scale) -> a=loc, b=loc+scale
                 random_state=[self.random_state]
             )
-        else:
-            model_base = None
-            model_params_dist = None
         self._logger.info(f'  model base {model_base}')
         self._logger.info(f'  model parameters distribution {model_params_dist}')
         return model_base, model_params_dist
@@ -294,7 +288,7 @@ class ModelCropland(Model):
                 max_samples=self.best_params['max_samples'],
                 random_state=self.random_state
             )
-        elif self.model_name == 'mlp':
+        else:  # self.model_name == 'mlp':
             model = MLPClassifier(
                 hidden_layer_sizes=self.best_params['hidden_layer_sizes'],
                 alpha=self.best_params['alpha'],
@@ -303,8 +297,6 @@ class ModelCropland(Model):
                 early_stopping=self.best_params['early_stopping'],
                 random_state=self.random_state
             )
-        else:
-            model = None
         return model
 
 

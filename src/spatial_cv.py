@@ -4,7 +4,7 @@ import geopandas as gpd
 from spacv.grid_builder import assign_pt_to_grid
 from spacv.base_classes import BaseSpatialCV
 from spacv.utils import convert_geoseries
-from spacv.spacv import UserDefinedSCV
+from spacv.spacv import UserDefinedSCV, SKCV
 
 
 class ModifiedBlockCV(UserDefinedSCV):
@@ -61,6 +61,41 @@ class ModifiedBlockCV(UserDefinedSCV):
         test : ndarray
             Testing set indices for iteration.
         """
+        XYs = convert_geoseries(XYs).reset_index(drop=True)
+        minx, miny, maxx, maxy = XYs.total_bounds
+
+        buffer_radius = self.buffer_radius
+        if buffer_radius > maxx - minx or buffer_radius > maxy - miny:
+            raise ValueError(
+                "buffer_radius too large and excludes all points. Given {}.".format(
+                    self.buffer_radius
+                )
+            )
+        num_samples = XYs.shape[0]
+        indices = XYs.index.values
+
+        for test_indices, train_excluded in self._iter_test_indices(XYs):
+            # Exclude the training indices within buffer
+            if train_excluded.shape:
+                train_excluded = np.concatenate([test_indices, train_excluded])
+            else:
+                train_excluded = test_indices
+            train_index = np.setdiff1d(
+                np.union1d(
+                    indices,
+                    train_excluded
+                ), np.intersect1d(indices, train_excluded)
+            )
+            if len(train_index) < 1:
+                raise ValueError(
+                    "Training set is empty. Try lowering buffer_radius to include more training instances."
+                )
+            test_index = indices[test_indices]
+            yield train_index, test_index
+
+
+class ModifiedSKCV(SKCV):
+    def split(self, XYs):
         XYs = convert_geoseries(XYs).reset_index(drop=True)
         minx, miny, maxx, maxy = XYs.total_bounds
 

@@ -7,7 +7,6 @@ rasterio
 scikit-image
 pyproj
 matplotlib
-sklearn
 scipy
 pulearn
 spacv

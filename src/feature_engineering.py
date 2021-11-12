@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 
 
-# TODO: check taking avg or max for multiple profile
-# TODO: smooth profile by method I investigated
 def calculate_ndvi(red, nir):
     """ Compute the NDVI
         INPUT : red (np.array) -> the Red band images as a numpy array of float
@@ -91,9 +89,9 @@ def get_raw_every_n_weeks(logger, bands_name, n_weeks, bands_array, n=4):
     for i in np.arange(0, n_weeks, n):
         new_col_name = [n + '_' + str(i + 1) for n in bands_name]
         if n_weeks - i >= n:
-            df_new[new_col_name] = bands_array[:, :, i:i + n].max(axis=2)
+            df_new[new_col_name] = bands_array[:, :, i:i + n].max(axis=2)  # take max
         else:
-            df_new[new_col_name] = bands_array[:, :, i:].max(axis=2)
+            df_new[new_col_name] = bands_array[:, :, i:].max(axis=2)  # take max
     logger.info(f'  ok, {df_new.shape[1]} new features are added.')
     return df_new.copy()
 

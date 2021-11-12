@@ -1,12 +1,11 @@
 import argparse
 import datetime
-from spacv.spacv import SKCV
 import geopandas as gpd
 from util import get_log_dir, get_logger
 from visualization import NVDI_profile, visualize_cv_fold, visualize_cv_polygons
 from prepare_data import clean_train_shapefiles, clean_test_shapefiles, prepare_data, construct_grid_to_fold
 from models import ModelCropland
-from spatial_cv import ModifiedBlockCV
+from spatial_cv import ModifiedBlockCV, ModifiedSKCV
 
 
 def cropland_classification(args):
@@ -28,6 +27,7 @@ def cropland_classification(args):
     # clean_test_shapefiles()
     logger.info('  ok')
 
+    # TODO: mask bands with clouds as 0 ? How literature convert cloudy pixels?
     # prepare train/validation/test set
     df_tv, df_train_val, x_train_val, y_train_val, polygons, scaler, meta, n_feature, feature_names = \
         prepare_data(logger, dataset='train_val', feature_dir=train_val_dir,
@@ -62,7 +62,7 @@ def cropland_classification(args):
         visualize_cv_fold(grid, meta, cv_name + '.tiff')
         logger.info(f' ok')
     else:  # spatial
-        scv = SKCV(n_splits=args.n_fold, buffer_radius=args.buffer_radius, random_state=args.random_state)
+        scv = ModifiedSKCV(n_splits=args.n_fold, buffer_radius=args.buffer_radius, random_state=args.random_state)
         cv_name = f'../figs/cv_{args.cv_type}_f{args.n_fold}_s{args.random_state}'
 
     if args.cv_type != 'random':
@@ -119,8 +119,6 @@ def cropland_classification(args):
     mlp.evaluate_by_metrics(x_test, y_test)
     mlp.predict_and_save(x, meta)
     mlp.evaluate_by_feature_importance(x_test, y_test, feature_names)
-
-    # ### GRU
 
 
 if __name__ == '__main__':
