@@ -5,9 +5,9 @@ from sentinelsat import SentinelAPI
 
 
 def download(args):
-    for m in range(7, 13):
+    for m in range(4, 5):
         date_range = get_month_first_last_date(m)
-        download_date(args.user, args.pwd, args.img_dir, args.tile_id, date_range)
+        download_date(args.user, args.password, args.img_dir, args.tile_id, date_range)
     print('Downloaded all the required data!')
 
 
@@ -29,7 +29,7 @@ def download_date(user, pwd, img_dir, tile_id, date_range):
                          platformname='Sentinel-2',
                          processinglevel='Level-1C',
                          raw=f'tileid:{tile_id}')
-    print(f'Find {len(products)} products!')
+    print(f'Found {len(products)} products in {date_range}')
 
     # check the number of online and offline products
     off_nb = 0

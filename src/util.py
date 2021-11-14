@@ -1,7 +1,6 @@
 import os
 import re
 import sys
-import math
 import fiona
 import pickle
 import logging
@@ -9,12 +8,12 @@ import datetime
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import shapely.geometry
 import skimage
 import skimage.draw
 import pyproj
 import rasterio
 from rasterio.mask import mask
-from rasterio.warp import calculate_default_transform, reproject, Resampling
 
 
 def load_geotiff(path, window=None):
@@ -35,63 +34,50 @@ def load_geotiff(path, window=None):
 
 
 def clip_raster(img_dir, clip_from_shp):
-    # shape file information
-    with fiona.open(clip_from_shp, "r") as shapefile:
-        shapes = [feature["geometry"] for feature in shapefile if feature["geometry"] is not None]
-    shape_crs = gpd.read_file(clip_from_shp).crs
-
     # check directory
     geotiff_dir = img_dir + 'geotiff/'
     clip_dir = img_dir + clip_from_shp.split('/')[2] + '/'
     if not os.path.exists(clip_dir):
         os.mkdir(clip_dir)
 
-    # clip all the raster
-    filenames = [f for f in sorted(os.listdir(geotiff_dir)) if f.endswith('.tiff')]
+    # get all files
+    clip_names = [f for f in sorted(os.listdir(geotiff_dir)) if f.endswith('.tiff')]
+
+    # get the target crs (raster's crs rather than shp's crs)
+    with rasterio.open(geotiff_dir + clip_names[0]) as src0:
+        raster_crs = src0.crs
+    # get the shp crs
+    shp = gpd.read_file(clip_from_shp)
+    # reproject shp if needed
+    if shp.crs != raster_crs:
+        shp = reproject_shapefile(raster_crs, shp)
+    # get geojson-like shapes
+    shapes = [shapely.geometry.mapping(s) for s in shp.geometry if s is not None]
+
     print('\nStart clipping...')
-    for i, filename in enumerate(filenames, start=1):
-        geotiff_filepath = geotiff_dir + filename
-        clip_filepath = clip_dir + filename
-        if not is_clipped(clip_filepath):
-            print(f'[{i}/{len(filenames)}] Clipping {clip_filepath}')
-            clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath)
+    for i, clip_name in enumerate(clip_names, start=1):
+        geotiff_path = geotiff_dir + clip_name
+        clip_path = clip_dir + clip_name
+        clip_flag = clip_single_raster(shapes, geotiff_path, clip_path)
+        if clip_flag:
+            print(f'[{i}/{len(clip_names)}] Clipped {clip_path}')
         else:
-            print(f'[{i}/{len(filenames)}] {clip_filepath} clipped')
+            print(f'[{i}/{len(clip_names)}] Discarded {clip_path}')
     print(f'Clip done!')
 
 
-def is_clipped(clip_filepath):
-    if os.path.exists(clip_filepath) and not os.path.exists(clip_filepath + '.aux.xml'):
-        return True
-    else:
-        return False
-
-
-def clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath):
+def clip_single_raster(shapes, geotiff_path, clip_path):
     """
 
-    :param shape_crs: projection of source shapefile
     :param shapes: geometry of source shapefile
-    :param geotiff_filepath: xx.tiff path
-    :param clip_filepath: output clipped path
+    :param geotiff_path: xx.tiff path
+    :param clip_path: output clipped path
     :return:
     """
-    # get the coordinate system of raster
-    raster = rasterio.open(geotiff_filepath)
-
-    # check if two coordinate systems are the same
-    # TODO: check if we re-project shp.crs to raster.crs
-    if shape_crs != raster.crs:
-        reproject_single_raster(raster.crs, geotiff_filepath, clip_filepath)
-        # read imagery file
-        with rasterio.open(clip_filepath) as src:
-            out_image, out_transform = mask(src, shapes, crop=True)
-            out_meta = src.meta
-    else:
-        # read imagery file
-        with rasterio.open(geotiff_filepath) as src:
-            out_image, out_transform = mask(src, shapes, crop=True)
-            out_meta = src.meta
+    # read imagery file
+    with rasterio.open(geotiff_path) as src:
+        out_image, out_transform = mask(src, shapes, crop=True)
+        out_meta = src.meta
 
     # Save clipped imagery
     out_meta.update({"driver": "GTiff",
@@ -99,33 +85,27 @@ def clip_single_raster(shape_crs, shapes, geotiff_filepath, clip_filepath):
                      "width": out_image.shape[2],
                      "transform": out_transform})
 
-    with rasterio.open(clip_filepath, "w", **out_meta) as dst:
-        # out_image.shape (band, height, width)
-        dst.write(out_image)
+    clip_flag = False
+    if out_image.mean() != 0.0:
+        with rasterio.open(clip_path, "w", **out_meta) as dst:
+            dst.write(out_image)
+        clip_flag = True
+    return clip_flag
 
 
-def reproject_single_raster(dst_crs, in_path, out_path):
-    """
-    :param dst_crs: output projection system
-    :param in_path
-    :param out_path
-    :return:
-    """
-    with rasterio.open(in_path) as src:
-        src_crs = src.crs
-        transform, width, height = calculate_default_transform(src_crs, dst_crs, src.width, src.height, *src.bounds)
-        out_meta = src.meta.copy()
-        out_meta.update({'crs': dst_crs, 'transform': transform, 'width': width, 'height': height})
-        with rasterio.open(out_path, 'w', **out_meta) as dst:
-            for i in range(1, src.count + 1):
-                reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=dst_crs,
-                    resampling=Resampling.nearest)
+def reproject_shapefile(dst_crs, shp):
+    return shp.to_crs(dst_crs)
+
+
+def convert_gdf_to_shp(data, save_path):
+    with fiona.Env(OSR_WKT_FORMAT="WKT2_2018"):
+        data.to_file(save_path)
+
+
+def read_shp(file_path):
+    with fiona.Env(OSR_WKT_FORMAT="WKT2_2018"):
+        data = gpd.read_file(file_path)
+    return data
 
 
 def timestamp_sanity_check(timestamp_std, filename):
