@@ -7,7 +7,7 @@ import shapely
 import numpy as np
 import geopandas as gpd
 import rasterio
-from util import clip_raster
+from src.utils.clip import clip_raster
 
 
 def process(args):
@@ -18,8 +18,6 @@ def process(args):
     cloud_dir = tile_dir + 'cloud_mask/'
     corrected_dir = tile_dir + 'corrected/'
     geotiff_dir = tile_dir + 'geotiff/'
-    if not os.path.exists(raw_dir):
-        os.mkdir(raw_dir)
     if not os.path.exists(safe_dir):
         os.mkdir(safe_dir)
     if not os.path.exists(cloud_dir):
@@ -32,13 +30,14 @@ def process(args):
     # process
     # unzip_products(raw_dir, safe_dir)
     # get_cloud_mask(safe_dir, cloud_dir)
-    # sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
-    # atmospheric_correction(sen2cor_path, safe_dir, corrected_dir)  # absolute path to call sen2cor
-    # merge_to_raster(corrected_dir, geotiff_dir, cloud_dir)
+    sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
+    # sen2cor_path = '../../Sen2Cor-02.09.00-win64/L2A_Process.bat'
+    atmospheric_correction(sen2cor_path, safe_dir, corrected_dir)  # absolute path to call sen2cor
+    merge_to_raster(corrected_dir, geotiff_dir, cloud_dir)
 
     # clip raster if needed
-    clip_raster(tile_dir, clip_from_shp='../data/train_region/train_region.shp')
-    clip_raster(tile_dir, clip_from_shp='../data/test_region_near/test_region_near.shp')
+    # clip_raster(tile_dir, clip_from_shp='../data/train_region/train_region.shp')
+    # clip_raster(tile_dir, clip_from_shp='../data/test_region_near/test_region_near.shp')
 
 
 def unzip_products(raw_dir, safe_dir):
@@ -49,9 +48,6 @@ def unzip_products(raw_dir, safe_dir):
         with zipfile.ZipFile(raw_file_dir, 'r') as zip_file:
             print(f"[{i}/{len(raw_files)}] Unzipping {raw_file_dir}")
             zip_file.extractall(safe_dir)
-        # delete zip file
-        shutil.rmtree(raw_file_dir)
-        print(f'  Deleted {raw_file_dir}')
     print("Unzip done!")
 
 
@@ -71,7 +67,6 @@ def get_cloud_mask(safe_dir, cloud_dir):
 
 def atmospheric_correction(sen2cor_path, safe_dir, corrected_dir):
     safe_files = os.listdir(safe_dir)
-    # safe_files = ['S2A_MSIL1C_20210502T053641_N0300_R005_T43SFR_20210502T074642.SAFE']
     for i, safe_file in enumerate(safe_files, start=1):
         safe_file_dir = safe_dir + safe_file
         if is_corrected(safe_file_dir, corrected_dir):
@@ -212,7 +207,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--img_dir', type=str,
                         default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/')
-    parser.add_argument('--tile_id', type=str, default='43SFR')
+    parser.add_argument('--tile_id', type=str, default='43RGQ')
     args = parser.parse_args()
 
     process(args)

@@ -1,12 +1,11 @@
-import pickle
 import argparse
 import datetime
 import numpy as np
 
-from util import get_log_dir, get_logger, get_grid_idx, count_classes, get_cropland_mask
-from prepare_data import Pipeline, train_test_split, get_spatial_cv_fold, get_unlabeled_data
-from models import ModelCropSpecific
-from visualization import visualize_train_test_grid_split
+from src.utils.util import get_log_dir, get_logger, get_grid_idx, count_classes, get_cropland_mask
+from src.data.prepare_data import Pipeline, train_test_split, get_spatial_cv_fold, get_unlabeled_data
+from src.models.base_model import ModelCropSpecific
+from src.evaluation.evaluate import visualize_train_test_grid_split
 
 
 def classifier_apples(args):
@@ -64,10 +63,10 @@ def classifier_apples(args):
                 get_spatial_cv_fold(x_train_val_pu, y_train_val_pu, grid_idx_train_val_pu)
             visualize_train_test_grid_split(meta, args.grid_size, grid_idx_test, [grid_idx_train_val_pu],
                                             f'../figs/apples_{args.grid_size}_train_test_split_{args.random_seed}.tiff')
-            logger.info('Saved train-test visualization.')
+            logger.info('Saved train-test evaluation.')
             visualize_train_test_grid_split(meta, args.grid_size, grid_idx_test, grid_idx_fold_pu,
                                             f'../figs/apples_{args.grid_size}_train_val_test_split_{args.random_seed}.tiff')
-            logger.info('Saved train-val-test visualization.')
+            logger.info('Saved train-val-test evaluation.')
 
     # ### models
     # ## OC-SVM
@@ -82,7 +81,7 @@ def classifier_apples(args):
     # ocsvm.fit_and_save_best_model(x_train_val_pos, y_train_val_pos)
     # fit known best parameters
     ocsvm.fit_and_save_best_model(x_train_val_pos, y_train_val_pos, {'gamma': 'scale', 'kernel': 'rbf', 'nu': 0.5})
-    # predict and evaluate
+    # predict and evaluation
     ocsvm.evaluate(x_test, y_test)
     ocsvm.predict_and_save(x, meta)  # predict from scratch
     ocsvm.predict_and_save(x, meta, cropland_mask)
@@ -98,7 +97,7 @@ def classifier_apples(args):
     pul.fit_and_save_best_model(x_train_val_pu, y_train_val_pu)
     # fit known best parameters
     # pul.fit_and_save_best_model(x_train_val_pu, y_train_val_pu, # TODO: argument)
-    # # predict and evaluate
+    # # predict and evaluation
     pul.evaluate(x_test, y_test)
     pul.predict_and_save(x, meta)
     pul.predict_and_save(x, meta, cropland_mask)

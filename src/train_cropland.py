@@ -1,15 +1,16 @@
 import argparse
 import datetime
 import geopandas as gpd
-from util import get_log_dir, get_logger
-from visualization import NVDI_profile, visualize_cv_fold, visualize_cv_polygons
-from prepare_data import clean_train_shapefiles, clean_test_shapefiles, prepare_data, construct_grid_to_fold
-from models import ModelCropland
-from spatial_cv import ModifiedBlockCV, ModifiedSKCV
+from src.data.prepare_data import prepare_data, construct_grid_to_fold, clean_train_shapefiles, clean_test_shapefiles
+from src.models.cropland import CroplandModel
+from src.utils.logger import get_log_dir, get_logger
+from src.utils.scv import ModifiedBlockCV, ModifiedSKCV
+from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 
 def cropland_classification(args):
-    testing = True
+    testing = False
+    tile_dir = args.img_dir + args.tile_id + '/'
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
     log_filename = f'cropland_{log_time}.log' if not testing else f'cropland_testing_{log_time}.log'
@@ -17,34 +18,32 @@ def cropland_classification(args):
     logger.info(args)
 
     logger.info('#### Cropland Classification')
-    train_val_dir = args.images_dir + 'train_area/' if not testing else args.images_dir + 'train_area_sample/'
-    test_dir = args.images_dir + 'test_region_near/' if not testing else args.images_dir + 'test_region_near_sample/'
+    train_val_dir = tile_dir + 'train_region/' if not testing else tile_dir + 'train_region_sample/'
+    test_dir = tile_dir + 'test_region_near/' if not testing else tile_dir + 'test_region_near_sample/'
 
     # clean shapefiles
     logger.info('# Clean shapefiles')
-    # TODO: fiona.errors.CRSError: Invalid input to create CRS
-    # clean_train_shapefiles()
-    # clean_test_shapefiles()
+    clean_train_shapefiles()
+    clean_test_shapefiles()
     logger.info('  ok')
 
-    # TODO: mask bands with clouds as 0 ? How literature convert cloudy pixels?
     # prepare train/validation/test set
     df_tv, df_train_val, x_train_val, y_train_val, polygons, scaler, meta, n_feature, feature_names = \
         prepare_data(logger, dataset='train_val', feature_dir=train_val_dir,
                      label_path='../data/train_labels/train_labels.shp',
                      feature_engineering=args.feature_engineering,
-                     feature_scaling=args.feature_scaling,
+                     scaling=args.scaling,
                      vis_ts=args.vis_ts, vis_profile=args.vis_profile)
     df_te, df_test, x_test, y_test, _, _, _, _, _ = \
         prepare_data(logger, dataset='test', feature_dir=test_dir,
                      label_path='../data/test_labels/test_labels.shp',
                      feature_engineering=args.feature_engineering,
-                     feature_scaling=args.feature_scaling, scaler=scaler,
+                     scaling=args.scaling, scaler=scaler,
                      vis_ts=args.vis_ts, vis_profile=args.vis_profile)
     logger.info(f'\nFeatures: {feature_names}')
     coords_train_val = gpd.GeoDataFrame({'geometry': df_train_val.coords.values})
     x = df_tv.iloc[:, :n_feature].values
-    if args.feature_scaling is not None:
+    if args.scaling is not None:
         x = scaler.transform(x)
         logger.info('Transformed all x')
 
@@ -72,22 +71,22 @@ def cropland_classification(args):
 
     # ### models
     # ## SVC
-    # svc = ModelCropland(logger, log_time, 'svc', args.random_state, '1106-101840_svc')
+    svc = CroplandModel(logger, log_time, 'svc', args.random_state)
     # # choose from
     # grid search
-    # if args.cv_type != 'random':
-    #     cv = scv.split(coords_train_val)
-    # svc.find_best_parameters(x_train_val, y_train_val, search_by=args.hp_search_by, cv=cv, testing=testing)
-    # svc.fit_and_save_best_model(x_train_val, y_train_val)
+    if args.cv_type != 'random':
+        cv = scv.split(coords_train_val)
+    svc.find_best_parameters(x_train_val, y_train_val, search_by=args.hp_search_by, cv=cv, testing=testing)
+    svc.fit_and_save_best_model(x_train_val, y_train_val)
     # fit known best parameters
     # svc.fit_and_save_best_model(x_train_val, y_train_val, {'C': 100, 'kernel': 'rbf'})
-    # # predict and evaluate
-    # svc.evaluate_by_metrics(x_test, y_test)
-    # svc.predict_and_save(x, meta)
-    # svc.evaluate_by_feature_importance(x_test, y_test, feature_names)
+    # predict and evaluation
+    svc.evaluate_by_metrics(x_test, y_test)
+    svc.predict_and_save(x, meta)
+    svc.evaluate_by_feature_importance(x_test, y_test, feature_names)
 
     # ## RFC
-    rfc = ModelCropland(logger, log_time, 'rfc', args.random_state)
+    rfc = CroplandModel(logger, log_time, 'rfc', args.random_state)
     # # choose from
     # grid search
     if args.cv_type != 'random':
@@ -96,13 +95,13 @@ def cropland_classification(args):
     rfc.fit_and_save_best_model(x_train_val, y_train_val)
     # rfc.fit_and_save_best_model(x_train_val, y_train_val,
     #                             {'criterion': 'entropy', 'max_depth': 15, 'max_samples': 0.8, 'n_estimators': 500})
-    # predict and evaluate
+    # predict and evaluation
     rfc.evaluate_by_metrics(x_test, y_test)
     rfc.predict_and_save(x, meta)
-    # rfc.evaluate_by_feature_importance(x_test, y_test, feature_names)
+    rfc.evaluate_by_feature_importance(x_test, y_test, feature_names)
 
     # ### MLP
-    mlp = ModelCropland(logger, log_time, 'mlp', args.random_state)
+    mlp = CroplandModel(logger, log_time, 'mlp', args.random_state)
     # # # choose from
     # # grid search
     if args.cv_type != 'random':
@@ -115,7 +114,7 @@ def cropland_classification(args):
     #                              'activation': 'relu', 'early_stopping': True})
     # # reload pretrained model
     # # rfc.load_pretrained_model('../models/1008-183014_rfc.sav')
-    # # # predict and evaluate
+    # # # predict and evaluation
     mlp.evaluate_by_metrics(x_test, y_test)
     mlp.predict_and_save(x, meta)
     mlp.evaluate_by_feature_importance(x_test, y_test, feature_names)
@@ -123,9 +122,11 @@ def cropland_classification(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--images_dir', type=str,
+    parser.add_argument('--img_dir', type=str,
                         default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/',
                         help='Base directory to all the images.')
+    parser.add_argument('--tile_id', type=str, default='43SFR')
+
     # cross validation
     parser.add_argument('--cv_type', type=str, default='spatial', choices=['random', 'block', 'spatial'],
                         help='Method of cross validation.')
@@ -139,7 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('--vis_ts', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)
     parser.add_argument('--feature_engineering', type=bool, default=False)
-    parser.add_argument('--feature_scaling', type=str, default=None, choices=[None, 'standardize', 'normalize'])
+    parser.add_argument('--scaling', type=str, default=None, choices=[None, 'standardize', 'normalize'])
     # hyper parameter
     parser.add_argument('--hp_search_by', type=str, default='grid', choices=['random', 'grid'],
                         help='Method to find hyper-parameters.')

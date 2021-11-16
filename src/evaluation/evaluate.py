@@ -1,12 +1,14 @@
 import os
 import fiona
+import shapely
 import argparse
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 import rasterio
 from sklearn.inspection import permutation_importance
-from util import load_geotiff, clip_single_raster
+from src.utils.util import load_geotiff
+from src.utils.clip import clip_single_raster
 
 """
 =============================== open datasets ================================
@@ -20,7 +22,7 @@ def evaluate_by_open_datasets(args):
     gfsad_align_path = '../data/gfsad_aligned.tiff'
     pred_path = '../preds/1022-102249_svc.tiff'
 
-    clip_open_datasets_based_on_study_area(gfsad_path, gfsad_clip_path)
+    clip_open_datasets_based_on_shp_region(gfsad_path, gfsad_clip_path)
     align_raster(pred_path, gfsad_clip_path, gfsad_align_path)
     compare_predictions_with_gfsad(pred_path, gfsad_align_path)
 
@@ -31,20 +33,23 @@ def evaluate_by_open_datasets(args):
     copernicus_align_path = '../data/copernicus_aligned.tiff'
     pred_path = '../preds/1008-183014_rfc.tiff'
 
-    clip_open_datasets_based_on_study_area(copernicus_path, copernicus_clip_path)
+    clip_open_datasets_based_on_shp_region(copernicus_path, copernicus_clip_path)
     align_raster(pred_path, copernicus_clip_path, copernicus_align_path)
     compare_predictions_with_copernicus(pred_path, copernicus_align_path)
 
     # compare predictions
-    diff_two_predictions('../preds/1008-183014_rfc.tiff', '../preds/1007-153151_svm.tiff')
+    # diff_two_predictions('../preds/1008-183014_rfc.tiff', '../preds/1007-153151_svm.tiff')
 
 
-def clip_open_datasets_based_on_study_area(input_path, output_path):
-    study_area_shp = '../data/train_area/train_area.shp'
-    with fiona.open(study_area_shp, "r") as shapefile:
-        study_area_shapes = [feature["geometry"] for feature in shapefile if feature["geometry"] is not None]
-    study_area_crs = gpd.read_file(study_area_shp).crs
-    clip_single_raster(study_area_crs, study_area_shapes, input_path, output_path)
+def clip_open_datasets_based_on_shp_region(input_path, output_path,
+                                           region_shp_path='../data/train_region/train_region.shp'):
+    region_shp = gpd.read_file(region_shp_path)
+    with rasterio.open(input_path, 'r') as src0:
+        input_crs = src0.crs
+    if region_shp.crs != input_crs:
+        region_shp = region_shp.to_crs(input_crs)
+    region_shapes = [shapely.geometry.mapping(s) for s in region_shp.geometry if s is not None]
+    clip_single_raster(region_shapes, input_path, output_path)
 
 
 def align_raster(pred_path, input_path, output_path):

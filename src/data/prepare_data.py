@@ -1,30 +1,24 @@
 import os
-import stat
-import pyproj
-import datetime
 import math
 import random
-import fiona
 import shapely
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 import rasterio
-import skimage
-import skimage.draw
 import pyproj
-from visualization import plot_timestamps
-from util import stack_all_timestamps, count_classes, load_target_shp, compute_mask, multipolygons_to_polygons
-from feature_engineering import add_bands, get_raw_every_n_weeks, get_statistics, get_difference
+from src.data.feature_engineering import add_bands, get_raw_every_n_weeks, get_statistics, get_difference
+from src.evaluation.visualize import plot_timestamps, plot_smoothed_ndvi_profile
+from src.utils.util import count_classes, load_target_shp, compute_mask, multipolygons_to_polygons
+from src.utils.stack import stack_all_timestamps
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from spacv.utils import geometry_to_2d
 from sklearn.neighbors import BallTree
 from spacv.grid_builder import construct_grid, assign_systematic, assign_optimized_random
-from visualization import plot_smoothed_ndvi_profile
 
 
 def prepare_data(logger, dataset, feature_dir, label_path,
-                 feature_scaling=None, scaler=None, feature_engineering=True, new_bands_name=['ndvi'],
+                 scaling=None, scaler=None, feature_engineering=True, new_bands_name=['ndvi'],
                  way='weekly', interpolation='previous',
                  vis_ts=False, vis_profile=False):
     """
@@ -42,7 +36,7 @@ def prepare_data(logger, dataset, feature_dir, label_path,
     dataset
     feature_dir
     label_path
-    feature_scaling
+    scaling
     feature_engineering
     new_bands_name
     scaler
@@ -78,51 +72,61 @@ def prepare_data(logger, dataset, feature_dir, label_path,
     feature_names = df.columns
     n_feature = feature_names.shape[0]
 
-    # get y
-    logger.info('# Load raw labels')
-    polygons, labels = get_labels(label_path, meta)
-    df['label'] = labels.reshape(-1)
-    logger.info('# Convert to cropland labels')
-    df['gt_cropland'] = df.label.values.copy()
-    df.loc[df.label.values == 1, 'gt_cropland'] = 2
+    if dataset != 'predict':
+        # get y
+        logger.info('# Load raw labels')
+        polygons, labels = get_labels(label_path, meta)
+        df['label'] = labels.reshape(-1)
+        logger.info('# Convert to cropland labels')
+        df['gt_cropland'] = df.label.values.copy()
+        df.loc[df.label.values == 1, 'gt_cropland'] = 2
 
-    # add coordinates
-    logger.info('# Add coordinates')
-    df['coords'] = construct_coords(meta)
-    # construct_coords(meta).total_bounds: ok
-    # df['coords'].values.total_bounds: ok
-    # df['coords'].total_bounds: 'Series' object has no attribute 'total_bounds'
-    # Maybe because df is DataFrame rather than GeoDataFrame?
+        # add coordinates
+        logger.info('# Add coordinates')
+        df['coords'] = construct_coords(meta)
 
-    # get valid and whole
-    df_valid, x_valid, y_valid = \
-        get_valid_x_y(logger, df=df, n_feature=n_feature, dataset=dataset)
+        # get valid and whole
+        df_valid, x_valid, y_valid = \
+            get_valid_x_y(logger, df=df, n_feature=n_feature, dataset=dataset)
 
-    # normalize
-    if feature_scaling is not None:
-        logger.info(f'# {feature_scaling} features')
-        if dataset == 'train_val':
-            if feature_scaling == 'normalize':
-                scaler = MinMaxScaler().fit(x_valid)
-            else:  # feature_scaling == 'standardize'
-                scaler = StandardScaler().fit(x_valid)
-        x_valid = scaler.transform(x_valid)
+        # normalize
+        if scaling is not None:
+            logger.info(f'# {scaling} features')
+            if dataset == 'train_val':
+                if scaling == 'normalize':
+                    scaler = MinMaxScaler().fit(x_valid)
+                else:  # scaling == 'standardize'
+                    scaler = StandardScaler().fit(x_valid)
+            x_valid = scaler.transform(x_valid)
 
-    if vis_profile:
-        # visualize ndvi profile weekly
-        ndvi_array = bands_array[:, bands_name.index('ndvi'), :].reshape(-1, len(timestamps_weekly_ref))
-        plot_smoothed_ndvi_profile(ndvi_array, df.label.values, timestamps_weekly_ref,
-                                   title=f'NDVI weekly profile smoothed ({dataset})',
-                                   save_path=f'../figs/NDVI_weekly_smoothed_{dataset}.png')
-        n_month = math.floor(len(timestamps_weekly_ref) / 4)
-        ndvi_array_monthly = ndvi_array[..., :(4 * n_month)].reshape(ndvi_array.shape[0], n_month, 4).max(axis=2)
-        plot_smoothed_ndvi_profile(ndvi_array_monthly, df.label.values, timestamps_weekly_ref[::4][:n_month],
-                                   title=f'NDVI monthly profile smoothed ({dataset})',
-                                   save_path=f'../figs/NDVI_monthly_smoothed_{dataset}.png')
+        # vis
+        if vis_profile:
+            # visualize ndvi profile weekly
+            ndvi_array = bands_array[:, bands_name.index('ndvi'), :].reshape(-1, len(timestamps_weekly_ref))
+            plot_smoothed_ndvi_profile(ndvi_array, df.label.values, timestamps_weekly_ref,
+                                       title=f'NDVI weekly profile smoothed ({dataset})',
+                                       save_path=f'../figs/NDVI_weekly_smoothed_{dataset}.png')
+            n_month = math.floor(len(timestamps_weekly_ref) / 4)
+            ndvi_array_monthly = ndvi_array[..., :(4 * n_month)].reshape(ndvi_array.shape[0], n_month, 4).max(axis=2)
+            plot_smoothed_ndvi_profile(ndvi_array_monthly, df.label.values, timestamps_weekly_ref[::4][:n_month],
+                                       title=f'NDVI monthly profile smoothed ({dataset})',
+                                       save_path=f'../figs/NDVI_monthly_smoothed_{dataset}.png')
+        logger.info('ok')
 
-    logger.info('ok')
+        return df, df_valid, x_valid, y_valid, polygons, scaler, meta, n_feature, feature_names
 
-    return df, df_valid, x_valid, y_valid, polygons, scaler, meta, n_feature, feature_names
+    else:  # dataset = 'predict'
+        # get x
+        x = df.iloc[:, :n_feature].values
+
+        # normalize
+        if scaling is not None:
+            logger.info(f'# {scaling} features')
+            x = scaler.transform(x)
+
+        logger.info('ok')
+
+        return df, x, meta, n_feature, feature_names
 
 
 def smooth_raw_bands(bands_array):
@@ -278,21 +282,6 @@ def assign_random(grid, n_fold, random_state):
     return grid_id
 
 
-# def construct_fold(grid):
-#     fold = gpd.GeoDataFrame(columns=['geometry'])
-#     for f_id in grid.fold_id.unique():
-#         grids = grid.geometry[grid.fold_id == f_id]
-#         print(f_id, grids.shape)
-#         fold.append({'geometry': shapely.ops.unary_union(grids)})
-#     return foldstruct_fold(grid):
-#     fold = gpd.GeoDataFrame(columns=['geometry'])
-#     for f_id in grid.fold_id.unique():
-#         grids = grid.geometry[grid.fold_id == f_id]
-#         print(f_id, grids.shape)
-#         fold.append({'geometry': shapely.ops.unary_union(grids)})
-#     return fold
-
-
 def construct_coords(meta):
     height, width = meta['height'], meta['width']
     minx, maxy = rasterio.transform.xy(meta['transform'], 0, 0)  # 77.03217968, 32.02331729
@@ -327,6 +316,10 @@ def clean_train_shapefiles(save_to_path='../data/train_labels/train_labels.shp')
     # put all shape files into one geo dataframe
     label_shp = gpd.GeoDataFrame(
         pd.concat([old_apples_shp, new_apples_shp, other_crops_shp, non_crops_shp], axis=0))
+    if old_apples_shp.crs == new_apples_shp.crs == non_crops_shp.crs == other_crops_shp.crs:
+        label_shp = label_shp.set_crs(new_apples_shp.crs)
+    else:
+        raise ValueError('crs of multiple files do not match.')
     # delete empty polygons
     label_shp = label_shp.dropna().reset_index(drop=True)
     # split multipolygons
@@ -342,6 +335,11 @@ def clean_test_shapefiles(save_to_path='../data/test_labels/test_labels.shp'):
 
 
 def get_label_in_region(label_shp, region_shp, save_to_path):
+    if label_shp.crs != region_shp.crs:
+        if label_shp.crs is None:
+            label_shp = label_shp.to_crs(region_shp.crs)
+        else:  # region_shp.crs == None
+            region_shp = region_shp.to_crs(label_shp.crs)
     label_in_region = gpd.overlay(label_shp, region_shp, how='intersection')
     cols2drop = [col for col in ['id', 'id_2'] if col in label_in_region.columns]
     label_in_region = label_in_region.drop(cols2drop, axis=1).rename(columns={'id_1': 'id'})

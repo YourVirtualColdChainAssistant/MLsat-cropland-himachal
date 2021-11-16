@@ -1,8 +1,5 @@
 import numpy as np
-import warnings
-import geopandas as gpd
 from spacv.grid_builder import assign_pt_to_grid
-from spacv.base_classes import BaseSpatialCV
 from spacv.utils import convert_geoseries
 from spacv.spacv import UserDefinedSCV, SKCV
 
@@ -71,7 +68,6 @@ class ModifiedBlockCV(UserDefinedSCV):
                     self.buffer_radius
                 )
             )
-        num_samples = XYs.shape[0]
         indices = XYs.index.values
 
         for test_indices, train_excluded in self._iter_test_indices(XYs):
@@ -106,7 +102,6 @@ class ModifiedSKCV(SKCV):
                     self.buffer_radius
                 )
             )
-        num_samples = XYs.shape[0]
         indices = XYs.index.values
 
         for test_indices, train_excluded in self._iter_test_indices(XYs):

@@ -1,6 +1,5 @@
 import os
 import re
-import random
 import itertools
 import numpy as np
 import matplotlib as mpl
@@ -12,9 +11,9 @@ import shapely
 import pyproj
 import pandas as pd
 import datetime
-from feature_engineering import add_bands
-from util import get_weekly_timestamps, get_monthly_timestamps, choices_sanity_check, \
-    load_geotiff, load_target_shp, compute_mask
+from src.data.feature_engineering import add_bands
+from src.utils.stack import get_weekly_timestamps, get_monthly_timestamps, choices_sanity_check
+from src.utils.util import load_geotiff, load_target_shp, compute_mask
 
 
 def normalize(array):
