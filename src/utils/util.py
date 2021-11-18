@@ -1,15 +1,14 @@
 import fiona
 import pickle
+import shapely
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 import skimage
-import skimage.draw
-import pyproj
 import rasterio
 
 
-def load_geotiff(path, window=None):
+def load_geotiff(path, window=None, as_float=True):
     """ Load the geotiff as a list of numpy array.
         INPUT : path (str) -> the path to the geotiff
                 window (rasterio.windows.Window) -> the window to use when loading the image
@@ -17,7 +16,10 @@ def load_geotiff(path, window=None):
                  meta (dictionary) -> the metadata associated with the geotiff
     """
     with rasterio.open(path) as f:
-        band = [skimage.img_as_uint(f.read(i + 1, window=window)) for i in range(f.count)]
+        if as_float:
+            band = [skimage.img_as_float(f.read(i + 1, window=window)) for i in range(f.count)]
+        else:  # normal read
+            band = [f.read(i + 1, window=window) for i in range(f.count)]
         meta = f.meta
         if window is not None:
             meta['height'] = window.height
@@ -47,54 +49,17 @@ def save_predictions_geotiff(meta_src, predictions, save_path):
             dst.write_colormap(1, color_map)
 
 
-def load_target_shp(path, transform=None, proj_out=None):
-    """ Load the shapefile as a list of numpy array of coordinates
-        INPUT : path (str) -> the path to the shapefile
-                transform (rasterio.Affine) -> the affine transformation to get the polygon in row;col format from UTM.
-        OUTPUT : poly (list of np.array) -> list of polygons (as numpy.array of coordinates)
-                 poly_rc (list of np.array) -> list of polygon in row-col format if a transform is given
-    """
-    print("Loading target shapefile...")
-    with fiona.open(path) as shapefile:
-        proj_in = pyproj.Proj(shapefile.crs)
-        class_type = [feature['properties']['id'] for feature in shapefile]
-        features = [feature["geometry"] for feature in shapefile]
-    # re-project polygons if necessary
-    if proj_out is None or proj_in == proj_out:
-        poly = [np.array([(coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i in
-                range(len(features))]
-        print('No re-projection!')
-    else:
-        poly = [np.array(
-            [pyproj.transform(proj_in, proj_out, coord[0], coord[1]) for coord in features[i]['coordinates'][0]]) for i
-            in range(len(features))]
-        print(f'Re-project from {proj_in} to {proj_out}')
+def load_shp_to_array(shp_path, meta):
+    print("Loading shapefile to nd.array...")
+    shp_gdf = gpd.read_file(shp_path).to_crs(meta['crs'])
+    val_list = list(shp_gdf.id.values)
+    features_list = [shapely.geometry.mapping(s) for s in shp_gdf.geometry]
 
-    poly_rc = None
-    # transform in row-col if a transform is given
-    if transform is not None:
-        poly_rc = [np.array([rasterio.transform.rowcol(transform, coord[0], coord[1])[::-1] for coord in p]) for p in
-                   poly]
-    print('Loaded target shape files.')
-
-    return features, poly, poly_rc, class_type
-
-
-def compute_mask(polygon_list, meta, val_list):
-    """ Get mask of class of a polygon list
-        INPUT : polygon_list (list od polygon in coordinates (x, y)) -> the polygons in row;col format
-                meta -> the image width and height
-                val_list(list of int) -> the class associated with each polygon
-        OUTPUT : img (np.array 2D) -> the mask in which the pixel value reflect it's class (zero being the absence of class)
-    """
-    img = np.zeros((meta['height'], meta['width']), dtype=np.uint8)  # skimage : row,col --> h,w
-    i = 0
-    for polygon, val in zip(polygon_list, val_list):
-        rr, cc = skimage.draw.polygon(polygon[:, 1], polygon[:, 0], img.shape)
-        img[rr, cc] = val
-        i += 1
-    print("Added targets' mask.")
-    return img
+    iterable = iter([(feature, val) for feature, val in zip(features_list, val_list)])
+    img = rasterio.features.rasterize(iterable, out_shape=(meta['height'], meta['width']),
+                                      transform=meta['transform'])
+    print('  ok')
+    return features_list, img
 
 
 def convert_gdf_to_shp(data, save_path):
@@ -212,3 +177,26 @@ def merge_tiles(path_list, out_path, bounds=None):
     # save the merged
     with rasterio.open(out_path, "w", **out_meta) as dst:
         dst.write(mosaic)
+
+
+def get_neighbors(idx, nodes, height, width):
+    if idx not in nodes:
+        nodes += [idx]
+    points = np.arange(height * width).reshape(height, width)
+    row, col = np.where(points == idx)
+    row, col = row[0], col[0]
+    if row == 0:
+        row_start, row_end = row, row + 2
+    elif row == height - 1:
+        row_start, row_end = row - 1, None
+    else:
+        row_start, row_end = row - 1, row + 2
+    if col == 0:
+        col_start, col_end = col, col + 2
+    elif col == width - 1:
+        col_start, col_end = col - 1, None
+    else:
+        col_start, col_end = col - 1, col + 2
+    grid3x3 = points[row_start:row_end, col_start:col_end].reshape(-1)
+    neighbors = [p for p in grid3x3 if p in nodes and p != idx]
+    return neighbors

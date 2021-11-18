@@ -79,6 +79,7 @@ def get_raw_every_n_weeks(logger, bands_name, n_weeks, bands_array, n=4):
         shape (n_pixels, n_bands, n_weeks)
     n_weeks
     bands_array
+    n
 
     Returns
     -------

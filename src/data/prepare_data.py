@@ -6,10 +6,9 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import rasterio
-import pyproj
 from src.data.feature_engineering import add_bands, get_raw_every_n_weeks, get_statistics, get_difference
 from src.evaluation.visualize import plot_timestamps, plot_smoothed_ndvi_profile
-from src.utils.util import count_classes, load_target_shp, compute_mask, multipolygons_to_polygons
+from src.utils.util import count_classes, load_shp_to_array, multipolygons_to_polygons, get_neighbors
 from src.utils.stack import stack_all_timestamps
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from spacv.utils import geometry_to_2d
@@ -55,15 +54,15 @@ def prepare_data(logger, dataset, feature_dir, label_path,
     logger.info(f'# Stack all timestamps {way}')
     bands_array, meta, timestamps_raw, timestamps_weekly, timestamps_weekly_ref = \
         stack_all_timestamps(logger, feature_dir, way=way, interpolation=interpolation)
-    if feature_engineering:
-        logger.info('# Smooth raw bands')
-        bands_array = smooth_raw_bands(bands_array)
+    # if feature_engineering:
+    #     logger.info('# Smooth raw bands')
+    #     bands_array = smooth_raw_bands(bands_array)
 
     # visualize
     if vis_ts:
         logger.info('# Visualize timestamps')
-        plot_timestamps(timestamps_raw, f'../figs/timestamps_raw_{dataset}.png')
-        plot_timestamps(timestamps_weekly_ref, f'../figs/timestamps_weekly_{dataset}.png')
+        plot_timestamps(timestamps_raw, None, f'../figs/timestamps_raw_{dataset}.png')
+        plot_timestamps(timestamps_weekly_ref, None, f'../figs/timestamps_weekly_{dataset}.png')
 
     # get x
     logger.info('# Build features')
@@ -75,7 +74,7 @@ def prepare_data(logger, dataset, feature_dir, label_path,
     if dataset != 'predict':
         # get y
         logger.info('# Load raw labels')
-        polygons, labels = get_labels(label_path, meta)
+        polygons, labels = load_shp_to_array(label_path, meta)
         df['label'] = labels.reshape(-1)
         logger.info('# Convert to cropland labels')
         df['gt_cropland'] = df.label.values.copy()
@@ -88,6 +87,12 @@ def prepare_data(logger, dataset, feature_dir, label_path,
         # get valid and whole
         df_valid, x_valid, y_valid = \
             get_valid_x_y(logger, df=df, n_feature=n_feature, dataset=dataset)
+
+        # add neighbors
+        nodes, neighbors = df_valid.index, []
+        for idx in nodes:
+            neighbors.append(get_neighbors(idx, nodes, meta['height'], meta['width']))
+        df_valid['neighbors'] = neighbors
 
         # normalize
         if scaling is not None:
@@ -104,13 +109,13 @@ def prepare_data(logger, dataset, feature_dir, label_path,
             # visualize ndvi profile weekly
             ndvi_array = bands_array[:, bands_name.index('ndvi'), :].reshape(-1, len(timestamps_weekly_ref))
             plot_smoothed_ndvi_profile(ndvi_array, df.label.values, timestamps_weekly_ref,
-                                       title=f'NDVI weekly profile smoothed ({dataset})',
-                                       save_path=f'../figs/NDVI_weekly_smoothed_{dataset}.png')
+                                       title=f'NDVI weekly profile ({dataset})',
+                                       save_path=f'../figs/NDVI_weekly_{dataset}.png')
             n_month = math.floor(len(timestamps_weekly_ref) / 4)
             ndvi_array_monthly = ndvi_array[..., :(4 * n_month)].reshape(ndvi_array.shape[0], n_month, 4).max(axis=2)
             plot_smoothed_ndvi_profile(ndvi_array_monthly, df.label.values, timestamps_weekly_ref[::4][:n_month],
-                                       title=f'NDVI monthly profile smoothed ({dataset})',
-                                       save_path=f'../figs/NDVI_monthly_smoothed_{dataset}.png')
+                                       title=f'NDVI monthly profile ({dataset})',
+                                       save_path=f'../figs/NDVI_monthly_{dataset}.png')
         logger.info('ok')
 
         return df, df_valid, x_valid, y_valid, polygons, scaler, meta, n_feature, feature_names
@@ -180,15 +185,6 @@ def build_features(logger, bands_array, feature_engineering, timestamps_weekly_r
         df = get_raw_every_n_weeks(logger, bands_name, n_weeks, bands_array, n=2)
     logger.info(f'  df.shape={df.shape}')
     return bands_array, df, bands_name
-
-
-def get_labels(label_path, meta):
-    features, polygons, rc_polygons, class_list = \
-        load_target_shp(label_path,
-                        transform=meta['transform'],
-                        proj_out=pyproj.Proj(meta['crs']))
-    labels = compute_mask(rc_polygons, meta, class_list)
-    return features, labels
 
 
 def construct_grid_to_fold(polygons_geo, tiles_x, tiles_y, shape='square', method='random', direction='diagonal',
@@ -284,8 +280,8 @@ def assign_random(grid, n_fold, random_state):
 
 def construct_coords(meta):
     height, width = meta['height'], meta['width']
-    minx, maxy = rasterio.transform.xy(meta['transform'], 0, 0)  # 77.03217968, 32.02331729
-    maxx, miny = rasterio.transform.xy(meta['transform'], height, width)  # 77.2176813 , 32.25444632
+    minx, maxy = rasterio.transform.xy(meta['transform'], 0, 0)  # (691375.0, 3571325.0)
+    maxx, miny = rasterio.transform.xy(meta['transform'], height, width)  # (709645.0, 3544635.0)
     xs = np.tile(np.linspace(minx, maxx, width, endpoint=False), reps=height)
     ys = np.linspace(maxy, miny, height, endpoint=False).repeat(width)
     xys = gpd.GeoSeries(gpd.points_from_xy(xs, ys))
@@ -294,7 +290,7 @@ def construct_coords(meta):
 
 def get_valid_x_y(logger, df, n_feature, dataset):
     mask_valid = df.gt_cropland.values != 0
-    df_valid = df[mask_valid].reset_index(drop=True)
+    df_valid = df[mask_valid]  # .reset_index(drop=True)
     x_valid = df_valid.iloc[:, :n_feature].values
     y_valid = df_valid.loc[:, 'gt_cropland'].values
     logger.info(

@@ -13,7 +13,7 @@ import pandas as pd
 import datetime
 from src.data.feature_engineering import add_bands
 from src.utils.stack import get_weekly_timestamps, get_monthly_timestamps, choices_sanity_check
-from src.utils.util import load_geotiff, load_target_shp, compute_mask
+from src.utils.util import load_geotiff, load_shp_to_array
 
 
 def normalize(array):
@@ -47,7 +47,7 @@ def show_true_color(raster, is_norm=True, save_path=None):
     _ = plt.subplots(figsize=(7, 7))
     plt.imshow(img_rgb)
     if save_path is not None:
-        plt.savefig(save_path)
+        plt.savefig(save_path, bbox_inches='tight')
 
 
 def read_n_show_true_color(raster, is_norm=True, save_path=None):
@@ -58,7 +58,7 @@ def read_n_show_true_color(raster, is_norm=True, save_path=None):
     _ = plt.subplots(figsize=(7, 7))
     plt.imshow(img_rgb)
     if save_path is not None:
-        plt.savefig(save_path)
+        plt.savefig(save_path, bbox_inches='tight')
 
 
 def get_mycmap(num_colors, cmap='Set1'):
@@ -108,7 +108,7 @@ def show_mask(classes_array, region_mask, title, windows=None, save_path=None):
     plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
     plt.title(title)
     if save_path is not None:
-        plt.savefig(save_path)
+        plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved mask to {save_path}')
 
 
@@ -129,7 +129,7 @@ def show_sat_and_mask(img_filepath, pred, meta_src, region_mask=None, save_path=
 
     # save side by side plot
     if save_path is not None:
-        plt.savefig(save_path)
+        plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved satellite image and its mask to {save_path}')
 
 
@@ -180,7 +180,7 @@ def plot_smoothed_ndvi_profile(ndvi_array, df_label, timestamps_ref, title=None,
     else:
         mean_df.to_csv('../figs/NDVI_profile.csv', index=False)
     if save_path is not None:
-        plt.savefig(save_path)
+        plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved ndvi profile to {save_path}')
 
 
@@ -218,7 +218,7 @@ def plot_ndvi_profile(ndvi_array, train_mask, timestamps_ref, title=None, save_p
     else:
         mean_df.to_csv('../figs/NDVI_profile.csv', index=False)
     if save_path is not None:
-        plt.savefig(save_path)
+        plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved ndvi profile to {save_path}')
 
 
@@ -228,17 +228,14 @@ class NVDI_profile(object):
     When aggregating, always take the maximal value within a period.
     """
 
-    def __init__(self, logger, from_dir, label_shp):
+    def __init__(self, logger, from_dir, label_shp_path):
         self.logger = logger
         self.logger.info('--- NDVI profile ---')
         self.ndvi_array_raw, self.timestamps_raw, self.meta = \
             self.stack_valid_raw_ndvi(from_dir)
         # get labels
-        _, train_rc_polygons, train_class_list = \
-            load_target_shp(label_shp, transform=self.meta['transform'],
-                            proj_out=pyproj.Proj(self.meta['crs']))
-        train_mask = compute_mask(train_rc_polygons, self.meta, train_class_list)
-        self.labels = train_mask.reshape(-1)
+        _, train_labels = load_shp_to_array(label_shp_path, self.meta)
+        self.labels = train_labels.reshape(-1)
 
     def raw_profile(self):
         # TODO: debug, each color has three lines

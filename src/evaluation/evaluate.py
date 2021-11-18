@@ -73,52 +73,80 @@ def align_raster(pred_path, input_path, output_path):
 
 
 def compare_predictions_with_gfsad(pred_path, dataset_path, logger=None):
+    """
+    Compare with GFSAD dataset to evaluate the overlap with croplands.
+    Legend of GFSAD: 1 = croplands, 2 = non-croplands.
+    Legend of Predictions: 2 = croplands, 3 = non-croplands.
+
+    Parameters
+    ----------
+    pred_path: string
+        path of predictions to compare
+    dataset_path: string
+        path of gfsad dataset
+    logger:
+
+    Returns
+    -------
+
+    """
     # load data
-    band_pred, meta_pred = load_geotiff(pred_path)
-    band_dataset, meta_dataset = load_geotiff(dataset_path)
+    band_pred, meta_pred = load_geotiff(pred_path, as_float=False)
+    band_dataset, meta_dataset = load_geotiff(dataset_path, as_float=False)
     band_pred = band_pred[0]
     band_dataset = band_dataset[0]
 
-    # rescale to make target value taking 1
-    band_pred = band_pred / band_pred.min()
-    band_dataset = band_dataset / band_dataset.max()
+    n_dataset = (band_dataset == 1).sum()
+    n_pred = (band_pred[band_dataset == 1] == 2).sum()
+    n_dataset2 = (band_dataset == 2).sum()
+    n_pred2 = (band_pred[band_dataset == 2] == 2).sum()
 
-    # calculate
-    num_in_dataset = (band_dataset == 1.0).sum()
-    num_in_pred = (band_pred[band_dataset == 1.0] == 1.0).sum()
     if logger == None:
-        print(f'Cropland pixel number in GFASD: {num_in_dataset}')
-        print(f'Cropland pixel number in prediction: {num_in_pred}')
-        print(f'Percentage: {num_in_pred / num_in_dataset * 100:.2f}%')
+        print(f'Cropland pixel number in GFASD: {n_dataset}')
+        print(f'Cropland pixel number in prediction: {n_pred}')
+        print(f'Percentage: {n_pred / n_dataset * 100:.2f}%')
     else:
-        logger.info(f'Cropland pixel number in GFASD: {num_in_dataset}')
-        logger.info(f'Cropland pixel number in prediction: {num_in_pred}')
-        logger.info(f'Percentage: {num_in_pred / num_in_dataset * 100:.2f}%')
+        logger.info(f'Cropland pixel number in GFASD: {n_dataset}')
+        logger.info(f'Cropland pixel number in prediction: {n_pred}')
+        logger.info(f'Percentage: {n_pred / n_dataset * 100:.2f}%')
+        logger.info(f'n_GFSAD={n_dataset2}, n_pred={n_pred2}, percentage={n_pred2 / n_dataset2 * 100:.2f}%')
 
 
 def compare_predictions_with_copernicus(pred_path, dataset_path, logger=None):
+    """
+    Compare with Copernicus dataset to evaluate the overlap of non-croplands.
+    Legend of Copernicus: 50 = built-up, 111 = closed forest / evergreen needle leaf.
+    Legend of Predictions: 2 = croplands, 3 = non-croplands.
+
+    Parameters
+    ----------
+    pred_path: string
+        path of predictions to compare
+    dataset_path: string
+        path of gfsad dataset
+    logger
+
+    Returns
+    -------
+
+    """
     # load data
-    band_pred, meta_pred = load_geotiff(pred_path)
-    band_dataset, meta_dataset = load_geotiff(dataset_path)
+    band_pred, meta_pred = load_geotiff(pred_path, as_float=False)
+    band_dataset, meta_dataset = load_geotiff(dataset_path, as_float=False)
     band_pred = band_pred[0]
     band_dataset = band_dataset[0]
 
-    # rescale to make target value taking 1
-    band_pred = band_pred / band_pred.max()
-    band_dataset = band_dataset * 255
-    band_dataset[(band_dataset == 50) | (band_dataset == 111)] = 1
-
     # calculate
-    num_in_dataset = (band_dataset == 1.0).sum()
-    num_in_pred = (band_pred[band_dataset == 1.0] == 1.0).sum()
+    n_dataset = ((band_dataset == 50) | (band_dataset == 111)).sum()
+    n_pred = (band_pred[(band_dataset == 50) | (band_dataset == 111)] == 3).sum()
     if logger is None:
-        print(f'Non-cropland pixel number in Copernicus: {num_in_dataset}')
-        print(f'Non-cropland pixel number in prediction: {num_in_pred}')
-        print(f'Percentage: {num_in_pred / num_in_dataset * 100:.2f}%')
+        print(f'Non-cropland pixel number in Copernicus: {n_dataset}')
+        print(f'Non-cropland pixel number in prediction: {n_pred}')
+        print(f'Percentage: {n_pred / n_dataset * 100:.2f}%')
     else:
-        logger.info(f'Non-cropland pixel number in Copernicus: {num_in_dataset}')
-        logger.info(f'Non-cropland pixel number in prediction: {num_in_pred}')
-        logger.info(f'Percentage: {num_in_pred / num_in_dataset * 100:.2f}%')
+        logger.info(f'Non-cropland pixel number in Copernicus: {n_dataset}')
+        logger.info(f'Non-cropland pixel number in prediction: {n_pred}')
+        logger.info(f'Percentage: {n_pred / n_dataset * 100:.2f}%')
 
 
 def diff_two_predictions(pred_path_1, pred_path_2):
@@ -138,11 +166,6 @@ def diff_two_predictions(pred_path_1, pred_path_2):
     with rasterio.open(output_path, "w", **meta_pred_1) as dst:
         dst.write(band_diff)
         print(f'Save difference between {pred_name_1} and {pred_name_2} to {output_path}')
-
-
-"""
-=============================== feature importance ================================
-"""
 
 
 def impurity_importance_table(feature_names, feature_importance, save_path):

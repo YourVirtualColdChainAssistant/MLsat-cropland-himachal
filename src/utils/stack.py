@@ -31,7 +31,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
     # sorted available files
     filenames = sorted([file for file in os.listdir(from_dir) if file.endswith('tiff')])
     # get bands' meta data
-    _, meta = load_geotiff(from_dir + filenames[0])
+    _, meta = load_geotiff(from_dir + filenames[0], as_float=False)
     # find all the raw time stamps
     timestamps_bf = []
     for filename in filenames:
@@ -63,7 +63,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
                 # read band
                 filename = filenames[id]
                 raster_path = from_dir + filename
-                band, meta = load_geotiff(raster_path)
+                band, meta = load_geotiff(raster_path, as_float=False)
                 # sanity check
                 timestamp_sanity_check(timestamp, raster_path)
                 # mask cloud
@@ -112,6 +112,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
 
     # stack finally
     bands_array = np.stack(bands_list, axis=2)
+    meta.update(count=meta['count'] - 1)
     logger.info(f'  avg. cloud coverage = {np.array(cloud_coverage_list).mean():.2f}')
     logger.info('  ok')
 
