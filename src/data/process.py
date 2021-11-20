@@ -30,9 +30,9 @@ def process(args):
     # process
     # unzip_products(raw_dir, safe_dir)
     # get_cloud_mask(safe_dir, cloud_dir)
-    sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
+    # sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
     # sen2cor_path = '../../Sen2Cor-02.09.00-win64/L2A_Process.bat'
-    atmospheric_correction(sen2cor_path, safe_dir, corrected_dir)  # absolute path to call sen2cor
+    # atmospheric_correction(sen2cor_path, safe_dir, corrected_dir)  # absolute path to call sen2cor
     merge_to_raster(corrected_dir, geotiff_dir, cloud_dir)
 
     # clip raster if needed
@@ -135,7 +135,7 @@ def merge_to_raster(corrected_dir, geotiff_dir, cloud_dir):
         in_path = in_dir + file_name + '/IMG_DATA/R10m/*_B*.jp2'
         out_path = geotiff_dir + file_name + '.tiff'
         cloud_path = cloud_dir + 'L1C' + file_name.lstrip('L2A') + '/cloud_mask.shp'
-        convert_jp2_to_tiff(in_path, out_path, crs, cloud_path)
+        convert_jp2_to_tiff(in_path, cloud_path, out_path, crs)
         print(f'[{i}/{len(file_paths)}] merged {out_path}')
     print('Merge done!')
 

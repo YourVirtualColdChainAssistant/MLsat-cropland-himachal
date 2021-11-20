@@ -51,46 +51,70 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
 
     # ### stack all the timestamps
     timestamps_af_pd = pd.Series(timestamps_af)
-    bands_list, black_ids, cloud_coverage_list = [], [], []
+    n_total = meta['height'] * meta['width']
+    bands_list, black_ids, p_cloud_list, p_fill_list = [], [], [], []
     for i, timestamp in enumerate(timestamps_ref, start=1):
         # get all the indices
         ids = timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index
         band_list = []
         # with non-empty data, check missing data
         if len(ids) != 0:
-            cloud_coverage = []
+            cloud_coverage, nodata_mask_list = [], []
             for id in ids:
                 # read band
                 filename = filenames[id]
                 raster_path = from_dir + filename
-                band, meta = load_geotiff(raster_path, as_float=False)
+                band, meta = load_geotiff(raster_path, as_float=True)
                 # sanity check
                 timestamp_sanity_check(timestamp, raster_path)
                 # mask cloud
                 cloudy_mask = band[-1] != 0
-                have_data_mask = band[0] != 0
-                for j, b in enumerate(band[:-1]):
-                    band[j][cloudy_mask] = 0
+                nodata_mask = band[0] == 0
+                nodata_mask_list.append(nodata_mask)
                 band = band[:-1]
+                for j in range(len(band)):
+                    band[j][cloudy_mask & (~nodata_mask)] = 0
                 # pixel values check
                 if np.array(band).mean() != 0.0:
                     band_list.append(np.stack(band, axis=2).reshape(-1, len(band)))
-                    cloud_coverage.append(round(cloudy_mask.sum() / have_data_mask.sum(), 2))
+                    # Cloud mask is originally available at 60m, resampling can cause inconsistency in data,
+                    # so we count cloudy_mask[have_data_mask].sum() rather than cloudy_mask.sum().
+                    # The latter can cause percentage greater than 1.
+                    cloud_coverage.append(round(cloudy_mask[~nodata_mask].sum() / (~nodata_mask).sum(), 4))
                 else:
                     black_ids.append(id)
 
         # stack by index
-        if len(band_list) != 0 and i != 1:
-            band_list = np.stack(band_list, axis=2).max(axis=2)  # take max
+        if len(band_list) != 0:
+            # merge images of a period by taking max
+            band_list = np.stack(band_list, axis=2).max(axis=2)
+            # check the real number of no data, influenced by merging several images
+            nodata_mask = nodata_mask_list[0]
+            for m in nodata_mask_list:
+                nodata_mask = nodata_mask & m
+            n_nodata = nodata_mask.sum()
             # use forward filling for no_data
-            nodata_mask = band_list[:, 0] == 0
-            for k in range(meta['count'] - 1):
-                band_list[nodata_mask, k] = bands_list[-1][nodata_mask, k]
-            cloud_coverage_list.append(np.array(cloud_coverage).mean())
+            zero_mask = band_list[:, 0] == 0
+            n_zero = zero_mask.sum()
+            # # check whether all bands have NoData in the same position
+            # masks = []
+            # for k in range(meta['count'] - 1):
+            #     masks.append((band_list[:, k] == 0).sum())
+            # if not masks[0] == masks[1] == masks[2] == masks[3]:
+            #     logger.info(f'         NoData number in four bands are {masks}')
+            if i != 1:
+                for k in range(meta['count'] - 1):
+                    band_list[zero_mask, k] = bands_list[-1][zero_mask, k]
+            p_cloud_list.append(round((n_zero - n_nodata) / n_total, 4))
+            p_fill_list.append(round(n_zero / n_total, 4))
         elif interpolation == 'zero' or i == 1:
             band_list = np.zeros((meta['height'] * meta['width'], meta['count'] - 1))
+            p_cloud_list.append(0)
+            p_fill_list.append(1)
         else:  # interpolation == 'previous'
             band_list = bands_list[-1]
+            p_cloud_list.append(p_cloud_list[i - 2])
+            p_fill_list.append(1)
 
         # print
         if len(ids) != 0:
@@ -101,19 +125,21 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
                 else:
                     print_str += f'{timestamps_bf[id].strftime("%Y-%m-%d")}, '
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} ({print_str})')
-            if len(cloud_coverage):
-                logger.info(f'         cloud_coverage {cloud_coverage} => {np.array(cloud_coverage).mean():.2f}')
         elif interpolation == 'zero' or i == 1:
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (0)')
         else:
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (previous)')
+        if len(cloud_coverage):
+            logger.info(f'          cloud_coverage {cloud_coverage} => {p_cloud_list[i - 1]:.4f}')
+        logger.info(f'          filling ratio = {p_fill_list[i - 1]}')
 
         bands_list.append(band_list)
 
     # stack finally
     bands_array = np.stack(bands_list, axis=2)
     meta.update(count=meta['count'] - 1)
-    logger.info(f'  avg. cloud coverage = {np.array(cloud_coverage_list).mean():.2f}')
+    logger.info(f'  avg. cloud coverage = {np.array(p_cloud_list).mean():.4f}')
+    logger.info(f'  avg. filling ratio = {np.array(p_fill_list).mean():.4f}')
     logger.info('  ok')
 
     return bands_array, meta, timestamps_bf, timestamps_af, timestamps_ref

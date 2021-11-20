@@ -3,8 +3,6 @@ import datetime
 import skgstat as skg
 import numpy as np
 import geopandas as gpd
-# from pysal.explore import esda
-# from libpysal.weights import W
 from src.data.prepare_data import prepare_data, construct_grid_to_fold, clean_train_shapefiles, clean_test_shapefiles
 from src.models.cropland import CroplandModel
 from src.utils.logger import get_log_dir, get_logger
@@ -13,7 +11,7 @@ from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 
 def cropland_classification(args):
-    testing = True
+    testing = False
     tile_dir = args.img_dir + args.tile_id + '/'
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
@@ -62,22 +60,6 @@ def cropland_classification(args):
     variogram_near = skg.Variogram(coords_xy[sample_ids_near], df_train_val.gt_cropland.values[sample_ids_near])
     variogram_near.plot().savefig('../figs/semivariogram_near.png', bbox_inches='tight')
     logger.info('Saved semivariogram')
-
-    # calculate Moran's I
-    # equal
-    # neighbors_equal = df_train_val.neighbors[sample_ids_equal].to_dict()
-    # weights_equal = df_train_val.neighbors[sample_ids_equal].apply(lambda x: [1 / len(x) for _ in x])
-    # w_equal = W(neighbors_equal, weights_equal)
-    # moran_equal = esda.Moran(df_train_val.gt_cropland.values[sample_ids_equal], w_equal)
-    # logger.info(f'*equal: \n  moran.I {moran_equal.I}, moran.EI {moran_equal.EI}, moran.p_sim {moran_equal.p_sim},' + \
-    #             f'  moran.EI_sim {moran_equal.EI_sim}, moran.z_sim {moran_equal.z_sim}, moran.p_z_sim {moran_equal.p_z_sim}')
-    # # near
-    # neighbors_near = df_train_val.neighbors[sample_ids_near].to_dict()
-    # weights_near = df_train_val.neighbors[sample_ids_near].apply(lambda x: [1 / len(x) for _ in x])
-    # w_near = W(neighbors_near, weights_near)
-    # moran_near = esda.Moran(df_train_val.gt_cropland.values[sample_ids_near], w_near)
-    # logger.info(f'*near: \n  moran.I {moran_near.I}, moran.EI {moran_near.EI}, moran.p_sim {moran_near.p_sim},' + \
-    #             f'  moran.EI_sim {moran_near.EI_sim}, moran.z_sim {moran_near.z_sim}, moran.p_z_sim {moran_near.p_z_sim}')
 
     # cross validation
     if args.cv_type == 'random':
@@ -175,7 +157,7 @@ if __name__ == '__main__':
     parser.add_argument('--vis_ts', type=bool, default=True)
     parser.add_argument('--vis_profile', type=bool, default=True)
     parser.add_argument('--feature_engineering', type=bool, default=True)
-    parser.add_argument('--scaling', type=str, default='standardize', choices=[None, 'standardize', 'normalize'])
+    parser.add_argument('--scaling', type=str, default=None, choices=[None, 'standardize', 'normalize'])
     # hyper parameter
     parser.add_argument('--hp_search_by', type=str, default='grid', choices=['random', 'grid'],
                         help='Method to find hyper-parameters.')

@@ -145,7 +145,7 @@ def plot_timestamps(timestamps, title=None, save_path=None):
         print(f'Saved time stamps to {save_path}')
 
 
-def plot_smoothed_ndvi_profile(ndvi_array, df_label, timestamps_ref, title=None, save_path=None):
+def plot_ndvi_profile(ndvi_array, df_label, timestamps_ref, title=None, save_path=None):
     """
     colors:
     0 - black - no labels
@@ -172,44 +172,7 @@ def plot_smoothed_ndvi_profile(ndvi_array, df_label, timestamps_ref, title=None,
         mean_df['mean_' + str(label)] = mean
         mean_df['std_' + str(label)] = std
     plt.legend(loc='best')
-    plt.xlabel('Time')
-    plt.ylabel('NDVI')
-    if title is not None:
-        plt.title(title)
-        mean_df.to_csv(f'../figs/{title}.csv', index=False)
-    else:
-        mean_df.to_csv('../figs/NDVI_profile.csv', index=False)
-    if save_path is not None:
-        plt.savefig(save_path, bbox_inches='tight')
-        print(f'Saved ndvi profile to {save_path}')
-
-
-def plot_ndvi_profile(ndvi_array, train_mask, timestamps_ref, title=None, save_path=None):
-    """
-    colors:
-    0 - black - no labels
-    1 - red - apples
-    2 - green - other crops
-    3 - blue - non crops
-
-    :param ndvi_array: np.array
-        shape (height * width, ndvi time profile)
-    :return:
-    """
-    _ = plt.subplots(1, 1, figsize=(10, 7))
-    labels = np.unique(train_mask)
-    print(f"labels = {labels}")
-    colors_map = {0: 'black', 1: 'tab:red', 2: 'tab:green', 3: 'tab:brown'}
-    labels_map = {0: 'no data', 1: 'apples', 2: 'other crops', 3: 'non crops'}
-    mean_df = pd.DataFrame()
-    for label in labels:
-        mean = ndvi_array[train_mask == label].mean(axis=0)
-        std = ndvi_array[train_mask == label].std(axis=0)
-        plt.plot(timestamps_ref, mean, color=colors_map[label], label=labels_map[label])
-        plt.fill_between(timestamps_ref, mean - std, mean + std, color=colors_map[label], alpha=0.2)
-        mean_df['mean_' + str(label)] = mean
-        mean_df['std_' + str(label)] = std
-    plt.legend(loc='best')
+    plt.ylim(0, 1)
     plt.xlabel('Time')
     plt.ylabel('NDVI')
     if title is not None:

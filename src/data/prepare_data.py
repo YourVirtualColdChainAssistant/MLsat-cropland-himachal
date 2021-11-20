@@ -7,8 +7,8 @@ import pandas as pd
 import geopandas as gpd
 import rasterio
 from src.data.feature_engineering import add_bands, get_raw_every_n_weeks, get_statistics, get_difference
-from src.evaluation.visualize import plot_timestamps, plot_smoothed_ndvi_profile
-from src.utils.util import count_classes, load_shp_to_array, multipolygons_to_polygons, get_neighbors
+from src.evaluation.visualize import plot_timestamps, plot_ndvi_profile
+from src.utils.util import count_classes, load_shp_to_array, multipolygons_to_polygons
 from src.utils.stack import stack_all_timestamps
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from spacv.utils import geometry_to_2d
@@ -88,12 +88,6 @@ def prepare_data(logger, dataset, feature_dir, label_path,
         df_valid, x_valid, y_valid = \
             get_valid_x_y(logger, df=df, n_feature=n_feature, dataset=dataset)
 
-        # add neighbors
-        nodes, neighbors = df_valid.index, []
-        for idx in nodes:
-            neighbors.append(get_neighbors(idx, nodes, meta['height'], meta['width']))
-        df_valid['neighbors'] = neighbors
-
         # normalize
         if scaling is not None:
             logger.info(f'# {scaling} features')
@@ -108,14 +102,14 @@ def prepare_data(logger, dataset, feature_dir, label_path,
         if vis_profile:
             # visualize ndvi profile weekly
             ndvi_array = bands_array[:, bands_name.index('ndvi'), :].reshape(-1, len(timestamps_weekly_ref))
-            plot_smoothed_ndvi_profile(ndvi_array, df.label.values, timestamps_weekly_ref,
-                                       title=f'NDVI weekly profile ({dataset})',
-                                       save_path=f'../figs/NDVI_weekly_{dataset}.png')
+            plot_ndvi_profile(ndvi_array, df.label.values, timestamps_weekly_ref,
+                              title=f'NDVI weekly profile ({dataset})',
+                              save_path=f'../figs/NDVI_weekly_{dataset}.png')
             n_month = math.floor(len(timestamps_weekly_ref) / 4)
             ndvi_array_monthly = ndvi_array[..., :(4 * n_month)].reshape(ndvi_array.shape[0], n_month, 4).max(axis=2)
-            plot_smoothed_ndvi_profile(ndvi_array_monthly, df.label.values, timestamps_weekly_ref[::4][:n_month],
-                                       title=f'NDVI monthly profile ({dataset})',
-                                       save_path=f'../figs/NDVI_monthly_{dataset}.png')
+            plot_ndvi_profile(ndvi_array_monthly, df.label.values, timestamps_weekly_ref[::4][:n_month],
+                              title=f'NDVI monthly profile ({dataset})',
+                              save_path=f'../figs/NDVI_monthly_{dataset}.png')
         logger.info('ok')
 
         return df, df_valid, x_valid, y_valid, polygons, scaler, meta, n_feature, feature_names
