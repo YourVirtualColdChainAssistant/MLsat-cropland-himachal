@@ -3,7 +3,9 @@ import pickle
 import argparse
 import datetime
 import numpy as np
+import glob
 from rasterio.windows import Window
+from rasterio.merge import merge
 from src.data.prepare_data import prepare_data
 from src.utils.logger import get_log_dir, get_logger
 from src.utils.util import save_predictions_geotiff
@@ -42,6 +44,13 @@ def cropland_predict(args):
         # read and predict in patches
         full_len, n_patch = 10800, 10
         patch_len = int(full_len / n_patch)
+
+        # check path existence
+        file_path = f'../preds/tiles/{args.tile_id}/'
+        if not os.path.isdir(file_path):
+            os.makedirs(file_path)
+
+        # predict patch by patch
         for row in np.linspace(0, full_len, n_patch, endpoint=False, dtype=int):
             for col in np.linspace(0, full_len, n_patch, endpoint=False, dtype=int):
                 # get window
@@ -60,13 +69,14 @@ def cropland_predict(args):
                 preds = model.predict(x)
                 # save predictions
                 logger.info('Saving predictions...')
-                file_path = f'../preds/tiles/{args.tile_id}/'
-                if not os.path.isdir(file_path):
-                    os.makedirs(file_path)
                 pred_name = file_path + str(row) + '_' + str(col) + '.tiff'
                 save_predictions_geotiff(meta, preds, pred_name)
                 logger.info(f'Predictions are saved to {pred_name}')
-        # TODO: merge patches into a tile  
+
+        # merge patches into single raster
+        logger.info('Merging patches...')
+        patches_list = [f for f in glob.glob(file_path + '*.tiff')]
+        merge(patches_list, dst_path=file_path + args.tile_id + '.tiff')
     else:
         for district, test_dir in zip(['mandi', 'shimla'], [test_mandi_dir, test_shimla_dir]):
             logger.info(f'### Test on {district}')
