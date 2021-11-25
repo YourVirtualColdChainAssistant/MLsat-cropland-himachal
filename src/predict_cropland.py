@@ -23,11 +23,11 @@ def cropland_predict(args):
 
     logger.info('#### Test Cropland Model')
     train_val_dir = args.img_dir + '43SFR/train_area/' if not testing else args.img_dir + '43SFR/train_area_sample/'
+    test_kullu_dir = args.img_dir + '43SFR/test_labels_kullu/'
     test_mandi_dir = args.img_dir + '43RGQ/test_labels_mandi/'
     test_shimla_dir = args.img_dir + '43RGQ/test_labels_shimla/'
     predict_dir = tile_dir + 'geotiff/' if not testing else tile_dir + 'geotiff_sample/'
 
-    # prepare train/validation/test set
     # _, _, _, _, _, scaler, _, _, _ = \
     #     prepare_data(logger, dataset='train_val', feature_dir=train_val_dir,
     #                  label_path='../data/train_labels/train_labels.shp',
@@ -78,8 +78,10 @@ def cropland_predict(args):
         patches_list = [f for f in glob.glob(file_path + '*.tiff')]
         merge(patches_list, dst_path=file_path + args.tile_id + '.tiff')
     else:
-        for district, test_dir in zip(['mandi', 'shimla'], [test_mandi_dir, test_shimla_dir]):
+        test_dir_dict = {'kullu': test_kullu_dir, 'mandi': test_mandi_dir, 'shimla': test_shimla_dir}
+        for district in test_dir_dict.keys():
             logger.info(f'### Test on {district}')
+            test_dir = test_dir_dict[district]
             label_path = f'../data/test_labels_{district}/test_labels_{district}.shp'
             # prepare data
             _, df_test, x_test, y_test, _, _, meta, n_feature, feature_names = \
@@ -91,7 +93,7 @@ def cropland_predict(args):
             model = CroplandModel(logger, log_time, args.pretrained.split('_')[-1],
                                   args.random_state, pretrained_name=args.pretrained)
             model.test(x_test, y_test, meta, index=df_test.index, region_shp_path=label_path,
-                       feature_names=feature_names, pred_name=f'{district}_on_{args.pretrained}')
+                       feature_names=feature_names, pred_name=f'{args.pretrained}_{district}')
 
 
 if __name__ == '__main__':

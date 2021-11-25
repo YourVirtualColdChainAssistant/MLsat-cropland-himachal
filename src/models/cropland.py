@@ -23,10 +23,10 @@ class CroplandModel(BaseModel):
                 raise ValueError('Initialized model is not the same as the pretrained model.')
             self.load_pretrained_model(f'../models/{pretrained_name}.pkl')
 
-    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3, n_iter=10,
-                             testing=False):
-        super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv,
-                                     n_iter=n_iter, testing=testing)
+    def find_best_hyperparams(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3, n_iter=10,
+                              testing=False):
+        super().find_best_hyperparams(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv,
+                                      n_iter=n_iter, testing=testing)
 
     def evaluate_by_metrics(self, y_test, y_test_pred):
         self._logger.info('Evaluating by metrics...')

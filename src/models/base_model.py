@@ -19,8 +19,8 @@ class BaseModel(object):
         if self.model_name not in model_list:
             raise ValueError(f'No such model {self.model_name}. Please choose from {model_list}.')
 
-    def find_best_parameters(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3, n_iter=10,
-                             testing=False):
+    def find_best_hyperparams(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3, n_iter=10,
+                              testing=False):
         self._logger.info(f"Finding the best parameters using {search_by} search...")
         if search_by == 'grid':
             model_base, model_params = self._get_model_base_and_params_list_grid(testing)
@@ -39,7 +39,7 @@ class BaseModel(object):
         self.best_params = model_search.best_params_
         self._logger.info(f"  Best score {model_search.best_score_:.4f} with best parameters: {self.best_params}")
 
-    def fit_and_save_best_model(self, x_train_val, y_train_val, best_params=None):
+    def fit_best(self, x_train_val, y_train_val, best_params=None):
         # determin the best parameters
         if best_params is not None:
             self.best_params = best_params

@@ -20,16 +20,50 @@ class CropModel(BaseModel):
         else:
             self.load_pretrained_model(pretrained_name)
 
-    def find_best_parameters(self, x_train_val, y_train_val, scoring='recall', search_by='grid', cv=3, testing=False):
-        super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by,
-                                     cv=cv, testing=testing)
+    def find_best_hyperparams(self, x_train_val, y_train_val, scoring='recall', search_by='grid', cv=3, testing=False):
+        super().find_best_hyperparams(x_train_val, y_train_val, scoring=scoring, search_by=search_by,
+                                      cv=cv, testing=testing)
 
-    def evaluate_by_recall(self, x_test, y_test):
+    def evaluate_by_recall(self, y_test, y_test_pred):
         self._logger.info('Evaluating by recall...')
-        self._logger.info("  Predicting test data...")
-        y_test_pred = self.model.predict(x_test)
-        self._logger.info('  ok')
         self._logger.info(f"The best recall is {recall_score(y_test, y_test_pred, average='macro')}")
+
+    def test(self, x_test, y_test, meta, index, pred_name):
+        self._logger.info("## Testing")
+        y_test_pred = self.model.predict(x_test)
+        y_test_pred_converted = self.convert_partial_predictions(y_test_pred, index, meta)
+        self._save_predictions(meta, y_test_pred_converted, pred_name)
+        self.evaluate_by_recall(y_test, y_test_pred)
+
+    def predict(self, x, meta, cropland_mask=None, pred_name=None):
+        if cropland_mask is None:  # predict from scratch
+            to_name = self.to_name + '_from_scratch'
+            y_pred = self._predict_from_scratch(x)
+        else:  # predict from cropland
+            to_name = self.to_name + '_from_cropland'
+            y_pred = self._predict_from_cropland(x, cropland_mask)
+        self._save_predictions(meta, y_pred, to_name)
+
+    def _predict_from_cropland(self, x, cropland_mask):
+        self._logger.info('Predicting from cropland (with cropland only)...')
+        x_cropland = x[cropland_mask]
+        y_cropland_pred = self.model.predict(x_cropland)
+        self._logger.info('Masking cropland region...')
+        y_preds = np.zeros(x.shape[0], dtype=int)
+        y_preds[cropland_mask] = y_cropland_pred
+        self._logger.info('  ok')
+        return y_preds
+
+    def _predict_from_scratch(self, x):
+        self._logger.info('Predicting from scratch (with all data)...')
+        y_preds = self.model.predict(x)
+        self._logger.info('  ok')
+        return y_preds
+
+    def _predict_pretrained_base_model(self, x):
+        self._logger.info('Predicting x ...')
+        preds = self.base_model.predict(x)
+        return preds
 
     def _get_model_base_and_params_list_grid(self, testing):
         if self.model_name == 'ocsvm':
@@ -124,35 +158,3 @@ class CropModel(BaseModel):
                 hold_out_ratio=self.best_params['hold_out_ratio']
             )
         return model
-
-    def predict_and_save(self, x, meta, cropland_mask=None):
-        if cropland_mask is None:
-            # predict from scratch
-            to_name = self.to_name + '_from_scratch'
-            y_preds = self._predict_from_scratch(x)
-        else:
-            # predict from cropland
-            to_name = self.to_name + '_from_cropland'
-            y_preds = self._predict_from_cropland(x, cropland_mask)
-        self._save_predictions(meta, y_preds, to_name)
-
-    def _predict_from_cropland(self, x, cropland_mask):
-        self._logger.info('Predicting from cropland (with cropland only)...')
-        x_cropland = x[cropland_mask]
-        y_cropland_pred = self.model.predict(x_cropland)
-        self._logger.info('Masking cropland region...')
-        y_preds = np.zeros(x.shape[0], dtype=int)
-        y_preds[cropland_mask] = y_cropland_pred
-        self._logger.info('  ok')
-        return y_preds
-
-    def _predict_from_scratch(self, x):
-        self._logger.info('Predicting from scratch (with all data)...')
-        y_preds = self.model.predict(x)
-        self._logger.info('  ok')
-        return y_preds
-
-    def _predict_pretrained_base_model(self, x):
-        self._logger.info('Predicting x ...')
-        preds = self.base_model.predict(x)
-        return preds
