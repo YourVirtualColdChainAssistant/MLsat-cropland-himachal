@@ -8,6 +8,7 @@ import numpy as np
 import geopandas as gpd
 import rasterio
 from src.utils.clip import clip_raster
+from src.data.prepare_data import clean_test_far_shapefiles
 
 
 def process(args):
@@ -33,11 +34,14 @@ def process(args):
     # sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
     # sen2cor_path = '../../Sen2Cor-02.09.00-win64/L2A_Process.bat'
     # atmospheric_correction(sen2cor_path, safe_dir, corrected_dir)  # absolute path to call sen2cor
-    merge_to_raster(corrected_dir, geotiff_dir, cloud_dir)
+    # merge_to_raster(corrected_dir, geotiff_dir, cloud_dir)
 
     # clip raster if needed
     # clip_raster(tile_dir, clip_from_shp='../data/train_region/train_region.shp')
     # clip_raster(tile_dir, clip_from_shp='../data/test_region_near/test_region_near.shp')
+    # clean_test_far_shapefiles()
+    # clip_raster(tile_dir, clip_from_shp='../data/test_labels_mandi/test_labels_mandi.shp')
+    clip_raster(tile_dir, clip_from_shp='../data/test_labels_shimla/test_labels_shimla.shp')
 
 
 def unzip_products(raw_dir, safe_dir):

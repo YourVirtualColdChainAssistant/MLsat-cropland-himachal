@@ -1,4 +1,5 @@
 import pickle
+import numpy as np
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from src.utils.util import save_predictions_geotiff
 
@@ -35,10 +36,6 @@ class BaseModel(object):
             raise ValueError(f'No {search_by} search. Choose from ["grid", "random"]')
 
         model_search.fit(x_train_val, y_train_val)
-        self._logger.info('  ok')
-        # model_search_name = f'../models/{self.to_name}_{search_by}.csv'
-        # save_cv_results(model_search.cv_results_, model_search_name)
-        # self._logger.info(f'  Saved {self.model_name.upper()} {search_by} search results to {model_search_name}')
         self.best_params = model_search.best_params_
         self._logger.info(f"  Best score {model_search.best_score_:.4f} with best parameters: {self.best_params}")
 
@@ -65,11 +62,11 @@ class BaseModel(object):
         pickle.dump(self.model, open(model_name, 'wb'))
         self._logger.info(f'  Saved the best {self.model_name.upper()} to {model_name}')
 
-    def predict_and_save(self, x, meta, to_name=None):
-        self._logger.info('Predicting all the data...')
-        y_preds = self.model.predict(x)
-        self._logger.info('  ok')
-        self._save_predictions(meta, y_preds, to_name)
+    @staticmethod
+    def convert_partial_predictions(preds, index, meta):
+        y_preds = np.zeros(meta['height'] * meta['width'])
+        y_preds[index] = preds
+        return y_preds
 
     def load_pretrained_model(self, pretrained_name):
         self._logger.info(f"Loading pretrained {pretrained_name}...")
@@ -79,9 +76,9 @@ class BaseModel(object):
     def _save_predictions(self, meta, y_preds, to_name=None):
         if to_name is None:
             to_name = self.to_name
-        preds_name = f'../preds/{to_name}.tiff'
-        save_predictions_geotiff(meta, y_preds, preds_name)
-        self._logger.info(f'  Saved {self.model_name.upper()} predictions to {preds_name}')
+        pred_path = f'../preds/{to_name}.tiff'
+        save_predictions_geotiff(meta, y_preds, pred_path)
+        self._logger.info(f'Saved {self.model_name.upper()} predictions to {pred_path}')
 
     def _get_model_base_and_params_list_grid(self, testing):
         raise NotImplementedError

@@ -4,8 +4,8 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import classification_report
-from src.evaluation.evaluate import align_raster, clip_open_datasets_based_on_shp_region, \
-    compare_predictions_with_gfsad, compare_predictions_with_copernicus, \
+from src.evaluation.evaluate import prepare_open_datasets, \
+    evaluate_by_gfsad, evaluate_by_copernicus, \
     impurity_importance_table, permutation_importance_table
 from src.models.base_model import BaseModel
 
@@ -28,60 +28,65 @@ class CroplandModel(BaseModel):
         super().find_best_parameters(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv,
                                      n_iter=n_iter, testing=testing)
 
-    def evaluate_by_metrics(self, x_test, y_test):
+    def evaluate_by_metrics(self, y_test, y_test_pred):
         self._logger.info('Evaluating by metrics...')
-        self._logger.info("  Predicting test data...")
-        y_test_pred = self.model.predict(x_test)
-        self._logger.info('  ok')
         # !! `labels` is related to the discrete number
         self._logger.info(
-            f"\n{classification_report(y_test, y_test_pred, labels=[2, 3], target_names=['crops', 'non-crops'])}"
+            f"\n{classification_report(y_test, y_test_pred, labels=[2, 3], target_names=['croplands', 'non-croplands'])}"
         )
 
     def evaluate_by_feature_importance(self, x_test, y_test, feature_names):
         self._logger.info('Evaluating by feature importance...')
         model_PI = f'../preds/{self.to_name}_PI.csv'
         permutation_importance_table(self.model, x_test, y_test, feature_names, f'{model_PI}')
-        self._logger.info('  ok')
         self._logger.info(f'  Saved permutation importance to {model_PI}')
         if self.model_name == 'rfc':
             model_II = f'../preds/{self.to_name}_II.csv'
             impurity_importance_table(feature_names, self.model.feature_importances_, f'{model_II}')
             self._logger.info(f'  Saved impurity importance to {model_II}')
 
-    def evaluate_by_open_datasets(self, pred_path):
+    def evaluate_by_open_datasets(self, region_shp_path, pred_name=None, label_only=True):
         self._logger.info('Evaluating by open datasets...')
         ancilliary_path = 'K:/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/'
+        pred_path = f'../preds/{pred_name}.tiff' if pred_name is not None else f'../preds/{self.to_name}.tiff'
+        district = region_shp_path.split('/')[-2].split('_')[-1]
 
-        # gfsad
-        gfsad_path = ancilliary_path + 'cropland/GFSAD30/GFSAD30SAAFGIRCE_2015_N30E70_001_2017286103800.tif'
-        gfsad_clip_path = '../data/gfsad_clipped.tiff'
-        gfsad_align_path = '../data/gfsad_aligned.tiff'
+        gfsad_args = {
+            'dataset': 'gfsad',
+            'raw_path': ancilliary_path + 'cropland/GFSAD30/GFSAD30SAAFGIRCE_2015_N30E70_001_2017286103800.tif',
+            'evaluate_func': evaluate_by_gfsad
+        }
+        copernicus_args = {
+            'dataset': 'copernicus',
+            'raw_path': ancilliary_path + 'landcover/Copernicus_LC100m/INDIA_2019/' + \
+                        'E060N40_PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif',
+            'evaluate_func': evaluate_by_copernicus
+        }
 
-        self._logger.info('Comparing GFSAD dataset with predictions...')
-        clip_open_datasets_based_on_shp_region(gfsad_path, gfsad_clip_path)
-        self._logger.info('  Clipped GFSAD dataset to study_region.')
-        align_raster(pred_path, gfsad_clip_path, gfsad_align_path)
-        self._logger.info('  Aligned GFSAD dataset to predictions.')
-        compare_predictions_with_gfsad(pred_path, gfsad_align_path, self._logger)
+        for ds in [gfsad_args, copernicus_args]:
+            dataset, raw_path, evaluate_func = ds['dataset'], ds['raw_path'], ds['evaluate_func']
+            out_path = f'../data/open_datasets/{dataset}_{district}.tiff'
+            self._logger.info(f'Comparing {dataset.upper()} dataset with predictions...')
+            prepare_open_datasets(raw_path, out_path, pred_path, region_shp_path, label_only)
+            evaluate_func(pred_path, out_path, self._logger)
 
-        # copernicus
-        copernicus_path = ancilliary_path + 'landcover/Copernicus_LC100m/INDIA_2019/' + \
-                          'E060N40_PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif'
-        copernicus_clip_path = '../data/copernicus_clipped.tiff'
-        copernicus_align_path = '../data/copernicus_aligned.tiff'
+    def test(self, x_test, y_test, meta, index, region_shp_path, feature_names=None, pred_name=None):
+        self._logger.info("## Testing")
+        # predict
+        y_test_pred = self.model.predict(x_test)
+        y_test_pred_converted = self.convert_partial_predictions(y_test_pred, index, meta)
+        self._save_predictions(meta, y_test_pred_converted, pred_name)
+        # evaluate
+        self.evaluate_by_metrics(y_test, y_test_pred)
+        self.evaluate_by_open_datasets(region_shp_path, pred_name, label_only=True)
+        if feature_names is not None:
+            self.evaluate_by_feature_importance(x_test, y_test, feature_names)
 
-        self._logger.info('Comparing Copernicus dataset with predictions...')
-        clip_open_datasets_based_on_shp_region(copernicus_path, copernicus_clip_path)
-        self._logger.info('  Clipped Copernicus dataset to study_region.')
-        align_raster(pred_path, copernicus_clip_path, copernicus_align_path)
-        self._logger.info('  Aligned Copernicus dataset to predictions.')
-        compare_predictions_with_copernicus(pred_path, copernicus_align_path, self._logger)
-
-    def predict_and_save(self, x, meta, to_name=None):
-        super().predict_and_save(x, meta, to_name)
-        pred_path = f'../preds/{self.to_name}.tiff' if to_name is None else f'../preds/{to_name}.tiff'
-        self.evaluate_by_open_datasets(pred_path)
+    def predict(self, x, meta, region_shp_path, pred_name=None):
+        self._logger.info("## Predicting")
+        y_pred = self.model.predict(x)
+        self._save_predictions(meta, y_pred, pred_name)
+        self.evaluate_by_open_datasets(region_shp_path, pred_name, label_only=False)
 
     def load_pretrained_model(self, pretrained_name):
         self._logger.info(f"Loading pretrained {pretrained_name}...")
