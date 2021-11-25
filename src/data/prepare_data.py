@@ -16,9 +16,9 @@ from sklearn.neighbors import BallTree
 from spacv.grid_builder import construct_grid, assign_systematic, assign_optimized_random
 
 
-def prepare_data(logger, dataset, feature_dir, label_path,
+def prepare_data(logger, dataset, feature_dir, label_path, window=None,
                  scaling=None, scaler=None, feature_engineering=True, new_bands_name=['ndvi'],
-                 way='weekly', interpolation='previous',
+                 way='weekly', interpolation='previous', check_filling=False,
                  vis_ts=False, vis_profile=False):
     """
     A pipeline to prepare data. The full process includes:
@@ -35,6 +35,7 @@ def prepare_data(logger, dataset, feature_dir, label_path,
     dataset
     feature_dir
     label_path
+    window
     scaling
     feature_engineering
     new_bands_name
@@ -53,7 +54,8 @@ def prepare_data(logger, dataset, feature_dir, label_path,
     # load raw bands
     logger.info(f'# Stack all timestamps {way}')
     bands_array, meta, timestamps_raw, timestamps_weekly, timestamps_weekly_ref = \
-        stack_all_timestamps(logger, feature_dir, way=way, interpolation=interpolation)
+        stack_all_timestamps(logger, feature_dir, window, way=way, interpolation=interpolation,
+                             check_filling=check_filling)
     # if feature_engineering:
     #     logger.info('# Smooth raw bands')
     #     bands_array = smooth_raw_bands(bands_array)
@@ -70,6 +72,7 @@ def prepare_data(logger, dataset, feature_dir, label_path,
                                                  timestamps_weekly_ref, new_bands_name=new_bands_name)
     feature_names = df.columns
     n_feature = feature_names.shape[0]
+    logger.info(f'\nFeatures: {feature_names}')
 
     if dataset != 'predict':
         # get y
@@ -100,6 +103,7 @@ def prepare_data(logger, dataset, feature_dir, label_path,
 
         # vis
         if vis_profile:
+            # TODO: visualize more vegetation indexes, for later feature engineering
             # visualize ndvi profile weekly
             ndvi_array = bands_array[:, bands_name.index('ndvi'), :].reshape(-1, len(timestamps_weekly_ref))
             plot_ndvi_profile(ndvi_array, df.label.values, timestamps_weekly_ref,
@@ -158,6 +162,7 @@ def build_features(logger, bands_array, feature_engineering, timestamps_weekly_r
     -------
 
     """
+    # TODO: add spatial-related features, other low-resolution NIR bands
     bands_name = ['blue', 'green', 'red', 'nir']
     # add more features
     if new_bands_name is not None:
@@ -302,7 +307,7 @@ def clean_train_shapefiles(save_to_path='../data/train_labels/train_labels.shp')
     new_apples_shp = gpd.read_file('../data/apples/survey20210825_polygons20210901_revised20210929.shp')
     non_crops_shp = gpd.read_file('../data/non_crops/non_crops.shp')
     other_crops_shp = gpd.read_file('../data/other_crops/other_crops.shp')
-    train_area_shp = gpd.read_file('../data/train_area/train_area.shp')
+    train_region_shp = gpd.read_file('../data/train_region/train_region.shp')
     # put all shape files into one geo dataframe
     label_shp = gpd.GeoDataFrame(
         pd.concat([old_apples_shp, new_apples_shp, other_crops_shp, non_crops_shp], axis=0))
@@ -310,21 +315,49 @@ def clean_train_shapefiles(save_to_path='../data/train_labels/train_labels.shp')
         label_shp = label_shp.set_crs(new_apples_shp.crs)
     else:
         raise ValueError('crs of multiple files do not match.')
-    # delete empty polygons
+    # delete empty polygons and split multipolygons
     label_shp = label_shp.dropna().reset_index(drop=True)
-    # split multipolygons
     label_shp = multipolygons_to_polygons(label_shp)
     # mask for the study area
-    get_label_in_region(label_shp, train_area_shp, save_to_path)
+    save_label_in_region(label_shp, train_region_shp, save_to_path)
 
 
-def clean_test_shapefiles(save_to_path='../data/test_labels/test_labels.shp'):
-    label_shp = gpd.read_file('../data/test_polygons/test_polygons.shp')
+# TODO: unify clean_test_shapefiles()
+def clean_test_near_shapefiles(save_to_path='../data/test_labels_near/test_labels_near.shp'):
+    label_shp = gpd.read_file('../data/test_polygons_near/test_polygons_near.shp')
     test_region_shp = gpd.read_file('../data/test_region_near/test_region_near.shp')
-    get_label_in_region(label_shp, test_region_shp, save_to_path)
+    # delete empty polygons and split multipolygons
+    label_shp = label_shp.dropna().reset_index(drop=True)
+    label_shp = multipolygons_to_polygons(label_shp)
+    # mask for the study area
+    save_label_in_region(label_shp, test_region_shp, save_to_path)
 
 
-def get_label_in_region(label_shp, region_shp, save_to_path):
+def clean_test_far_shapefiles():
+    old_apples_shp = gpd.read_file('../data/apples/survey20210716_polygons20210819_corrected20210831.shp')
+    new_apples_shp = gpd.read_file('../data/apples/survey20210825_polygons20210901_revised20210929.shp')
+    far_shp = gpd.read_file('../data/test_polygons_far/test_polygons_far.shp')  # include other crops and non-cropland
+    label_shp = gpd.GeoDataFrame(
+        pd.concat([old_apples_shp, new_apples_shp, far_shp], axis=0))
+    if old_apples_shp.crs == new_apples_shp.crs == far_shp.crs:
+        label_shp = label_shp.set_crs(new_apples_shp.crs)
+    else:
+        raise ValueError('crs of multiple files do not match.')
+    # delete empty polygons and split multipolygons
+    label_shp = label_shp.dropna().reset_index(drop=True)
+    label_shp = multipolygons_to_polygons(label_shp)
+    # check whether the dir exists
+    mandi_path = '../data/test_labels_mandi/test_labels_mandi.shp'
+    shimla_path = '../data/test_labels_shimla/test_labels_shimla.shp'
+    if not os.path.exists(mandi_path.rstrip(mandi_path.split('/')[-1])):
+        os.makedirs(mandi_path.rstrip(mandi_path.split('/')[-1]))
+    if not os.path.exists(shimla_path.rstrip(shimla_path.split('/')[-1])):
+        os.makedirs(shimla_path.rstrip(shimla_path.split('/')[-1]))
+    label_shp[label_shp.district.values == 'Mandi'].to_file(mandi_path)
+    label_shp[label_shp.district.values == 'Shimla'].to_file(shimla_path)
+
+
+def save_label_in_region(label_shp, region_shp, save_to_path):
     if label_shp.crs != region_shp.crs:
         if label_shp.crs is None:
             label_shp = label_shp.to_crs(region_shp.crs)

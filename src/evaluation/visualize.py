@@ -161,7 +161,7 @@ def plot_ndvi_profile(ndvi_array, df_label, timestamps_ref, title=None, save_pat
     labels = np.unique(df_label)
     print(f"labels = {labels}")
     colors_map = {0: 'black', 1: 'tab:red', 2: 'tab:green', 3: 'tab:brown'}
-    labels_map = {0: 'no data', 1: 'apples', 2: 'other crops', 3: 'non crops'}
+    labels_map = {0: 'unlabeled', 1: 'apples', 2: 'other croplands', 3: 'non-croplands'}
 
     mean_df = pd.DataFrame()
     for label in labels:
