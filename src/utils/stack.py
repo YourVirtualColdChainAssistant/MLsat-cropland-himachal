@@ -4,18 +4,23 @@ import datetime
 import numpy as np
 import pandas as pd
 from src.utils.util import load_geotiff
+from itertools import groupby
+import matplotlib.pyplot as plt
+import collections
 
 
-def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous'):
+def stack_all_timestamps(logger, from_dir, window=None, way='weekly', interpolation='previous', check_filling=False):
     """
     Stack all the timestamps in from_dir folder, ignoring all black images.
 
     :param logger: std::out
     :param from_dir: string
+    :param window: rasterio.window.Window
     :param way: string
         choices = ['raw', 'weekly', 'monthly']
     :param interpolation: string
         choices = ['zero', 'previous']
+    :param check_filling: bool
 
     :return: bands_array, meta, timestamps_bf, timestamps_af, timestamps_weekly
     bands_array: array
@@ -31,7 +36,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
     # sorted available files
     filenames = sorted([file for file in os.listdir(from_dir) if file.endswith('tiff')])
     # get bands' meta data
-    _, meta = load_geotiff(from_dir + filenames[0], as_float=False)
+    _, meta = load_geotiff(from_dir + filenames[0], window, as_float=False)
     # find all the raw time stamps
     timestamps_bf = []
     for filename in filenames:
@@ -53,6 +58,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
     timestamps_af_pd = pd.Series(timestamps_af)
     n_total = meta['height'] * meta['width']
     bands_list, black_ids, p_cloud_list, p_fill_list = [], [], [], []
+    indicator = []
     for i, timestamp in enumerate(timestamps_ref, start=1):
         # get all the indices
         ids = timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index
@@ -64,7 +70,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
                 # read band
                 filename = filenames[id]
                 raster_path = from_dir + filename
-                band, meta = load_geotiff(raster_path, as_float=True)
+                band, meta = load_geotiff(raster_path, window, as_float=True)
                 # sanity check
                 timestamp_sanity_check(timestamp, raster_path)
                 # mask cloud
@@ -83,7 +89,7 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
                     cloud_coverage.append(round(cloudy_mask[~nodata_mask].sum() / (~nodata_mask).sum(), 4))
                 else:
                     black_ids.append(id)
-
+        # TODO: check how to fill missing data in classic ML models
         # stack by index
         if len(band_list) != 0:
             # merge images of a period by taking max
@@ -95,13 +101,9 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
             n_nodata = nodata_mask.sum()
             # use forward filling for no_data
             zero_mask = band_list[:, 0] == 0
+            indicator.append(zero_mask)
             n_zero = zero_mask.sum()
-            # # check whether all bands have NoData in the same position
-            # masks = []
-            # for k in range(meta['count'] - 1):
-            #     masks.append((band_list[:, k] == 0).sum())
-            # if not masks[0] == masks[1] == masks[2] == masks[3]:
-            #     logger.info(f'         NoData number in four bands are {masks}')
+            # forward filling
             if i != 1:
                 for k in range(meta['count'] - 1):
                     band_list[zero_mask, k] = bands_list[-1][zero_mask, k]
@@ -111,10 +113,12 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
             band_list = np.zeros((meta['height'] * meta['width'], meta['count'] - 1))
             p_cloud_list.append(0)
             p_fill_list.append(1)
+            indicator.append(np.ones((meta['height'] * meta['width'])))
         else:  # interpolation == 'previous'
             band_list = bands_list[-1]
             p_cloud_list.append(p_cloud_list[i - 2])
             p_fill_list.append(1)
+            indicator.append(np.ones((meta['height'] * meta['width'])))
 
         # print
         if len(ids) != 0:
@@ -125,15 +129,53 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
                 else:
                     print_str += f'{timestamps_bf[id].strftime("%Y-%m-%d")}, '
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} ({print_str})')
+            if len(cloud_coverage):
+                logger.info(f'          cloud_coverage {cloud_coverage} => {p_cloud_list[i - 1]:.4f}')
         elif interpolation == 'zero' or i == 1:
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (0)')
         else:
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (previous)')
-        if len(cloud_coverage):
-            logger.info(f'          cloud_coverage {cloud_coverage} => {p_cloud_list[i - 1]:.4f}')
         logger.info(f'          filling ratio = {p_fill_list[i - 1]}')
 
         bands_list.append(band_list)
+
+    if check_filling:
+        # check filling occurrence
+        ind = np.array(indicator.copy())
+        counts = dict(sorted(collections.Counter(list(ind.sum(axis=0))).items()))
+        plt.figure()
+        plt.bar(counts.keys(), counts.values())
+        plt.xlim(0, len(timestamps_ref))
+        plt.xlabel('Filling counts')
+        plt.ylabel('Occurrence')
+        plt.savefig('../figs/filling_occurrence.png', bbox_inches='tight')
+        save_dict_to_df(counts, '../figs/filling_occurrence.csv')
+
+        consecutive_highest = []
+        for i in range(n_total):
+            _, num = highest_occ(list(ind[:, i]))
+            consecutive_highest.append(num)
+        consecutive_counts_highest = dict(sorted(collections.Counter(consecutive_highest).items()))
+        plt.figure()
+        plt.bar(consecutive_counts_highest.keys(), consecutive_counts_highest.values())
+        plt.xlim(0, len(timestamps_ref))
+        plt.xlabel('Filling counts')
+        plt.ylabel('Highest consecutive occurrence')
+        plt.savefig('../figs/filling_highest_consecutive_occurrence.png', bbox_inches='tight')
+        save_dict_to_df(consecutive_counts_highest, '../figs/filling_highest_consecutive_occurrence.csv')
+
+        consecutive = []
+        for i in range(n_total):
+            num = count_occ(list(ind[:, i]))
+            consecutive += num
+        consecutive_counts = dict(sorted(collections.Counter(consecutive).items()))
+        plt.figure()
+        plt.bar(consecutive_counts.keys(), consecutive_counts.values())
+        plt.xlim(0, len(timestamps_ref))
+        plt.xlabel('Filling counts')
+        plt.ylabel('Consecutive occurrence')
+        plt.savefig('../figs/filling_consecutive_occurrence.png', bbox_inches='tight')
+        save_dict_to_df(consecutive_counts, '../figs/filling_consecutive_occurrence.csv')
 
     # stack finally
     bands_array = np.stack(bands_list, axis=2)
@@ -143,6 +185,31 @@ def stack_all_timestamps(logger, from_dir, way='weekly', interpolation='previous
     logger.info('  ok')
 
     return bands_array, meta, timestamps_bf, timestamps_af, timestamps_ref
+
+
+def highest_occ(b):
+    occurrence, num_times = 0, 0
+    for key, values in groupby(b, lambda x: x):
+        if key == 1:
+            val = len(list(values))
+            if val >= num_times:
+                occurrence, num_times = key, val
+    return occurrence, num_times
+
+
+def count_occ(b):
+    num = []
+    for key, values in groupby(b, lambda x: x):
+        if key == 1:
+            num.append(len(list(values)))
+    return num
+
+
+def save_dict_to_df(d, save_path):
+    df = pd.DataFrame()
+    df['con'] = d.keys()
+    df['occ'] = d.values()
+    df.to_csv(save_path, index=False)
 
 
 def timestamp_sanity_check(timestamp_std, filename):
