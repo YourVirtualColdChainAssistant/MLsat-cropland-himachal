@@ -6,7 +6,7 @@ import numpy as np
 import glob
 from rasterio.windows import Window
 from rasterio.merge import merge
-from src.data.prepare_data import prepare_data
+from src.data.prepare_data import prepare_data, clean_test_shapefiles
 from src.utils.logger import get_log_dir, get_logger
 from src.utils.util import save_predictions_geotiff
 from src.models.cropland import CroplandModel
@@ -14,7 +14,7 @@ from src.models.cropland import CroplandModel
 
 def cropland_predict(args):
     testing = False
-    tile_dir = args.img_dir + args.tile_id + '/'
+
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
     log_filename = f'cropland_{log_time}_predict.log' if not testing else f'cropland_testing_{log_time}_predict.log'
@@ -22,11 +22,10 @@ def cropland_predict(args):
     logger.info(args)
 
     logger.info('#### Test Cropland Model')
-    train_val_dir = args.img_dir + '43SFR/train_area/' if not testing else args.img_dir + '43SFR/train_area_sample/'
-    test_kullu_dir = args.img_dir + '43SFR/test_labels_kullu/'
-    test_mandi_dir = args.img_dir + '43RGQ/test_labels_mandi/'
-    test_shimla_dir = args.img_dir + '43RGQ/test_labels_shimla/'
-    predict_dir = tile_dir + 'geotiff/' if not testing else tile_dir + 'geotiff_sample/'
+    train_val_dir = args.img_dir + '43SFR/geotiff/' if not testing else args.img_dir + '43SFR/geotiff_sample/'
+    test_near_dir = args.img_dir + '43SFR/geotiff/' if not testing else args.img_dir + '43SFR/geotiff_sample/'
+    test_far_dir = args.img_dir + '43RGQ/geotiff/' if not testing else args.img_dir + '43RGQ/geotiff_sample/'
+    predict_dir = args.img_dir + args.tile_id + '/geotiff/' if not testing else args.img_dir + args.tile_id + '/geotiff_sample/'
 
     # _, _, _, _, _, scaler, _, _, _ = \
     #     prepare_data(logger, dataset='train_val', feature_dir=train_val_dir,
@@ -78,14 +77,16 @@ def cropland_predict(args):
         patches_list = [f for f in glob.glob(file_path + '*.tiff')]
         merge(patches_list, dst_path=file_path + args.tile_id + '.tiff')
     else:
-        test_dir_dict = {'kullu': test_kullu_dir, 'mandi': test_mandi_dir, 'shimla': test_shimla_dir}
+        test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir, 'shimla': test_far_dir}
+        # test_dir_dict = {'mandi': test_far_dir, 'shimla': test_far_dir}
+        clean_test_shapefiles()
         for district in test_dir_dict.keys():
             logger.info(f'### Test on {district}')
             test_dir = test_dir_dict[district]
             label_path = f'../data/test_labels_{district}/test_labels_{district}.shp'
             # prepare data
             _, df_test, x_test, y_test, _, _, meta, n_feature, feature_names = \
-                prepare_data(logger, dataset='test', feature_dir=test_dir,
+                prepare_data(logger, dataset=f'test_{district}', feature_dir=test_dir,
                              label_path=label_path, feature_engineering=args.feature_engineering,
                              scaling=args.scaling, scaler=scaler, check_filling=False,
                              vis_ts=args.vis_ts, vis_profile=args.vis_profile)

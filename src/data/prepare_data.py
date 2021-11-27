@@ -6,9 +6,10 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import rasterio
+from rasterio.windows import Window
 from src.data.feature_engineering import add_bands, get_raw_every_n_weeks, get_statistics, get_difference
 from src.evaluation.visualize import plot_timestamps, plot_ndvi_profile
-from src.utils.util import count_classes, load_shp_to_array, multipolygons_to_polygons
+from src.utils.util import count_classes, load_shp_to_array, multipolygons_to_polygons, prepare_meta_window
 from src.utils.stack import stack_all_timestamps
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from spacv.utils import geometry_to_2d
@@ -53,8 +54,10 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
 
     # load raw bands
     logger.info(f'# Stack all timestamps {way}')
+    if not isinstance(window, Window):
+        meta, window = prepare_meta_window(feature_dir, label_path)
     bands_array, meta, timestamps_raw, timestamps_weekly, timestamps_weekly_ref = \
-        stack_all_timestamps(logger, feature_dir, window, way=way, interpolation=interpolation,
+        stack_all_timestamps(logger, feature_dir, meta, window, way=way, interpolation=interpolation,
                              check_filling=check_filling)
     # if feature_engineering:
     #     logger.info('# Smooth raw bands')
@@ -74,7 +77,7 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
     n_feature = feature_names.shape[0]
     logger.info(f'\nFeatures: {feature_names}')
 
-    if dataset != 'predict':
+    if 'predict' not in dataset:
         # get y
         logger.info('# Load raw labels')
         polygons, labels = load_shp_to_array(label_path, meta)
@@ -118,7 +121,7 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
 
         return df, df_valid, x_valid, y_valid, polygons, scaler, meta, n_feature, feature_names
 
-    else:  # dataset = 'predict'
+    else:  # 'predict' in dataset
         # get x
         x = df.iloc[:, :n_feature].values
 
@@ -322,8 +325,12 @@ def clean_train_shapefiles(save_to_path='../data/train_labels/train_labels.shp')
     save_label_in_region(label_shp, train_region_shp, save_to_path)
 
 
-# TODO: unify clean_test_shapefiles()
-def clean_test_near_shapefiles(save_to_path='../data/test_labels_near/test_labels_near.shp'):
+def clean_test_shapefiles():
+    clean_test_near_shapefiles()
+    clean_test_far_shapefiles()
+
+
+def clean_test_near_shapefiles(save_to_path='../data/test_labels_kullu/test_labels_kullu.shp'):
     label_shp = gpd.read_file('../data/test_polygons_near/test_polygons_near.shp')
     test_region_shp = gpd.read_file('../data/test_region_near/test_region_near.shp')
     # delete empty polygons and split multipolygons

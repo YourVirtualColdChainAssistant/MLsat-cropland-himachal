@@ -1,3 +1,5 @@
+import os
+
 import fiona
 import pickle
 import shapely
@@ -6,6 +8,7 @@ import pandas as pd
 import geopandas as gpd
 import skimage
 import rasterio
+from rasterio.windows import Window
 
 
 def load_geotiff(path, window=None, as_float=True):
@@ -200,3 +203,34 @@ def get_neighbors(idx, nodes, height, width):
     grid3x3 = points[row_start:row_end, col_start:col_end].reshape(-1)
     neighbors = [p for p in grid3x3 if p in nodes and p != idx]
     return neighbors
+
+
+def prepare_meta_window(geotiff_dir, label_path):
+    img_path = geotiff_dir + os.listdir(geotiff_dir)[0]
+    img = rasterio.open(img_path)
+    transform, dst_crs = img.transform, img.crs
+
+    label_shp = gpd.read_file(label_path)
+    label_shp = label_shp.to_crs(dst_crs)
+    window = get_window(transform, label_shp.total_bounds)
+
+    _, meta = load_geotiff(img_path, window, as_float=False)
+    return meta, window
+
+
+def get_window(transform, bounds):
+    """
+
+    Parameters
+    ----------
+    transform
+    bounds
+
+    Returns
+    -------
+    Window(col_off, row_off, width, height)
+    """
+    minx, miny, maxx, maxy = bounds
+    row_min, col_min = rasterio.transform.rowcol(transform, minx, maxy)
+    row_max, col_max = rasterio.transform.rowcol(transform, maxx, miny)
+    return Window(col_min, row_min, col_max - col_min, row_max - row_min)

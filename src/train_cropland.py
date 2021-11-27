@@ -3,8 +3,7 @@ import datetime
 import skgstat as skg
 import numpy as np
 import geopandas as gpd
-from src.data.prepare_data import prepare_data, construct_grid_to_fold, clean_train_shapefiles, \
-    clean_test_near_shapefiles
+from src.data.prepare_data import prepare_data, construct_grid_to_fold, clean_train_shapefiles
 from src.models.cropland import CroplandModel
 from src.utils.logger import get_log_dir, get_logger
 from src.utils.scv import ModifiedBlockCV, ModifiedSKCV
@@ -12,8 +11,7 @@ from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 
 def cropland_classification(args):
-    testing = False
-    tile_dir = args.img_dir + args.tile_id + '/'
+    testing = True
 
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
@@ -22,12 +20,12 @@ def cropland_classification(args):
     logger.info(args)
 
     logger.info('#### Cropland Classification')
-    train_val_dir = tile_dir + 'train_region/' if not testing else tile_dir + 'train_region_sample/'
     clean_train_shapefiles()
+    feature_dir = args.img_dir + args.tile_id + '/geotiff/' if not testing else args.img_dir + args.tile_id + '/geotiff_sample/'
 
     # prepare train and validation dataset
     df_tv, df_train_val, x_train_val, y_train_val, polygons, scaler, meta, n_feature, feature_names = \
-        prepare_data(logger, dataset='train_val', feature_dir=train_val_dir,
+        prepare_data(logger, dataset='train_val', feature_dir=feature_dir,
                      label_path='../data/train_labels/train_labels.shp',
                      feature_engineering=args.feature_engineering,
                      scaling=args.scaling, check_filling=True,
@@ -119,7 +117,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--vis_ts', type=bool, default=True)
     parser.add_argument('--vis_profile', type=bool, default=True)
-    parser.add_argument('--feature_engineering', type=bool, default=False)
+    parser.add_argument('--feature_engineering', type=bool, default=True)
     parser.add_argument('--scaling', type=str, default=None, choices=[None, 'standardize', 'normalize'])
     # hyper parameter
     parser.add_argument('--hp_search_by', type=str, default='grid', choices=['random', 'grid'],

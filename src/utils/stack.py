@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 import collections
 
 
-def stack_all_timestamps(logger, from_dir, window=None, way='weekly', interpolation='previous', check_filling=False):
+def stack_all_timestamps(logger, from_dir, meta, window=None, way='weekly', interpolation='previous',
+                         check_filling=False):
     """
     Stack all the timestamps in from_dir folder, ignoring all black images.
 
@@ -35,8 +36,7 @@ def stack_all_timestamps(logger, from_dir, window=None, way='weekly', interpolat
     # ### raw files
     # sorted available files
     filenames = sorted([file for file in os.listdir(from_dir) if file.endswith('tiff')])
-    # get bands' meta data
-    _, meta = load_geotiff(from_dir + filenames[0], window, as_float=False)
+
     # find all the raw time stamps
     timestamps_bf = []
     for filename in filenames:
