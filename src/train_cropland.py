@@ -29,7 +29,7 @@ def cropland_classification(args):
                      label_path='../data/train_labels/train_labels.shp',
                      feature_engineering=args.feature_engineering,
                      scaling=args.scaling, check_filling=True,
-                     vis_ts=args.vis_ts, vis_profile=args.vis_profile)
+                     vis_stack=args.vis_stack, vis_profile=args.vis_profile)
     coords_train_val = gpd.GeoDataFrame({'geometry': df_train_val.coords.values})
     x = df_tv.iloc[:, :n_feature].values
     if args.scaling is not None:
@@ -115,9 +115,10 @@ if __name__ == '__main__':
     parser.add_argument('--n_fold', type=int, default=3)
     parser.add_argument('--random_state', type=int, default=24)
 
-    parser.add_argument('--vis_ts', type=bool, default=True)
+    parser.add_argument('--vis_stack', type=bool, default=True)
     parser.add_argument('--vis_profile', type=bool, default=True)
     parser.add_argument('--feature_engineering', type=bool, default=True)
+    parser.add_argument('--smooth_band', type=bool, default=False)
     parser.add_argument('--scaling', type=str, default=None, choices=[None, 'standardize', 'normalize'])
     # hyper parameter
     parser.add_argument('--hp_search_by', type=str, default='grid', choices=['random', 'grid'],

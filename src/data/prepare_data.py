@@ -8,7 +8,7 @@ import geopandas as gpd
 import rasterio
 from rasterio.windows import Window
 from src.data.feature_engineering import add_bands, get_raw_every_n_weeks, get_statistics, get_difference
-from src.evaluation.visualize import plot_timestamps, plot_ndvi_profile
+from src.evaluation.visualize import plot_timestamps, plot_profile
 from src.utils.util import count_classes, load_shp_to_array, multipolygons_to_polygons, prepare_meta_window
 from src.utils.stack import stack_all_timestamps
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -18,9 +18,9 @@ from spacv.grid_builder import construct_grid, assign_systematic, assign_optimiz
 
 
 def prepare_data(logger, dataset, feature_dir, label_path, window=None,
-                 scaling=None, scaler=None, feature_engineering=True, new_bands_name=['ndvi'],
+                 scaling=None, scaler=None, feature_engineering=True, new_bands_name=['ndvi'], smooth_band=False,
                  way='weekly', interpolation='previous', check_filling=False,
-                 vis_ts=False, vis_profile=False):
+                 vis_stack=False, vis_profile=False):
     """
     A pipeline to prepare data. The full process includes:
     1. load raw bands
@@ -43,7 +43,7 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
     scaler
     way
     interpolation
-    vis_ts
+    vis_stack
     vis_profile
 
     Returns
@@ -56,23 +56,26 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
     logger.info(f'# Stack all timestamps {way}')
     if not isinstance(window, Window):
         meta, window = prepare_meta_window(feature_dir, label_path)
-    bands_array, meta, timestamps_raw, timestamps_weekly, timestamps_weekly_ref = \
+    bands_array, meta, timestamps_raw, _, timestamps_weekly_ref = \
         stack_all_timestamps(logger, feature_dir, meta, window, way=way, interpolation=interpolation,
                              check_filling=check_filling)
-    # if feature_engineering:
-    #     logger.info('# Smooth raw bands')
-    #     bands_array = smooth_raw_bands(bands_array)
+    if smooth_band:
+        logger.info('# Smooth raw bands')
+        bands_array = smooth_raw_bands(bands_array)
 
     # visualize
-    if vis_ts:
-        logger.info('# Visualize timestamps')
+    if vis_stack:
+        logger.info('# Visualize timestamp stacking')
         plot_timestamps(timestamps_raw, None, f'../figs/timestamps_raw_{dataset}.png')
         plot_timestamps(timestamps_weekly_ref, None, f'../figs/timestamps_weekly_{dataset}.png')
 
     # get x
     logger.info('# Build features')
-    bands_array, df, bands_name = build_features(logger, bands_array, feature_engineering,
-                                                 timestamps_weekly_ref, new_bands_name=new_bands_name)
+    bands_name = ['blue', 'green', 'red', 'nir']
+    if new_bands_name:
+        bands_array = add_bands(logger, bands_array, new_bands_name)
+        bands_name += new_bands_name
+    df = build_features(logger, bands_array, feature_engineering, timestamps_weekly_ref, bands_name=bands_name)
     feature_names = df.columns
     n_feature = feature_names.shape[0]
     logger.info(f'\nFeatures: {feature_names}')
@@ -104,19 +107,13 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
                     scaler = StandardScaler().fit(x_valid)
             x_valid = scaler.transform(x_valid)
 
-        # vis
+        # visualize profile weekly
         if vis_profile:
-            # TODO: visualize more vegetation indexes, for later feature engineering
-            # visualize ndvi profile weekly
-            ndvi_array = bands_array[:, bands_name.index('ndvi'), :].reshape(-1, len(timestamps_weekly_ref))
-            plot_ndvi_profile(ndvi_array, df.label.values, timestamps_weekly_ref,
-                              title=f'NDVI weekly profile ({dataset})',
-                              save_path=f'../figs/NDVI_weekly_{dataset}.png')
-            n_month = math.floor(len(timestamps_weekly_ref) / 4)
-            ndvi_array_monthly = ndvi_array[..., :(4 * n_month)].reshape(ndvi_array.shape[0], n_month, 4).max(axis=2)
-            plot_ndvi_profile(ndvi_array_monthly, df.label.values, timestamps_weekly_ref[::4][:n_month],
-                              title=f'NDVI monthly profile ({dataset})',
-                              save_path=f'../figs/NDVI_monthly_{dataset}.png')
+            for b in new_bands_name:
+                b_array = bands_array[:, bands_name.index(b), :].reshape(-1, len(timestamps_weekly_ref))
+                plot_profile(data=b_array, label=df.label.values, timestamps=timestamps_weekly_ref,
+                             veg_index=b, title=f'{b.upper()} {way} profile ({dataset})',
+                             save_path=f'../figs/{b.upper()}_{way}_{dataset}.png')
         logger.info('ok')
 
         return df, df_valid, x_valid, y_valid, polygons, scaler, meta, n_feature, feature_names
@@ -149,30 +146,27 @@ def smooth(y, box_pts):
     return y_smooth
 
 
-def build_features(logger, bands_array, feature_engineering, timestamps_weekly_ref, new_bands_name=['ndvi']):
+def build_features(logger, bands_array, feature_engineering, timestamps_weekly_ref, bands_name):
     """
 
     Parameters
     ----------
     logger
-    bands_array: ndarray
+    bands_array: nd.array
         shape (n_pixels, n_bands, n_weeks)
-    feature_engineering
-    timestamps_weekly_ref
-    new_bands_name
+    feature_engineering: bool
+        Whether to do complex feature engineering.
+    timestamps_weekly_ref: list
+        A list of weekly dates.
+    bands_name: string
+        Name of all bands we use, including derived new bands.
 
     Returns
     -------
 
     """
     # TODO: add spatial-related features, other low-resolution NIR bands
-    bands_name = ['blue', 'green', 'red', 'nir']
-    # add more features
-    if new_bands_name is not None:
-        bands_array = add_bands(logger, bands_array, new_bands_name)
-        bands_name += new_bands_name
     n_weeks = len(timestamps_weekly_ref)
-
     if feature_engineering:
         df = get_raw_every_n_weeks(logger, bands_name, n_weeks, bands_array, n=4)
         df_list = list()
@@ -180,13 +174,13 @@ def build_features(logger, bands_array, feature_engineering, timestamps_weekly_r
         # statistics
         df_list.append(get_statistics(logger, bands_name, bands_array))
         # difference of two successive timestamps
-        df_list.append(get_difference(logger, new_bands_name, n_weeks, bands_array))
+        df_list.append(get_difference(logger, bands_name[4:], n_weeks, bands_array))
         # concatenate
         df = pd.concat(df_list, axis=1)
     else:  # feature_engineering = False
         df = get_raw_every_n_weeks(logger, bands_name, n_weeks, bands_array, n=2)
     logger.info(f'  df.shape={df.shape}')
-    return bands_array, df, bands_name
+    return df
 
 
 def construct_grid_to_fold(polygons_geo, tiles_x, tiles_y, shape='square', method='random', direction='diagonal',

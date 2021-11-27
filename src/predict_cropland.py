@@ -32,7 +32,7 @@ def cropland_predict(args):
     #                  label_path='../data/train_labels/train_labels.shp',
     #                  feature_engineering=args.feature_engineering,
     #                  scaling=args.scaling,
-    #                  vis_ts=False, vis_profile=False)
+    #                  vis_stack=False, vis_profile=False)
     scaler = None
 
     if not args.test_far:
@@ -60,7 +60,7 @@ def cropland_predict(args):
                 df, x, meta, n_feature, feature_names = \
                     prepare_data(logger, dataset='predict', feature_dir=predict_dir, label_path=None, window=window,
                                  feature_engineering=args.feature_engineering, scaling=args.scaling, scaler=scaler,
-                                 vis_ts=args.vis_ts, vis_profile=args.vis_profile)
+                                 vis_stack=args.vis_stack, vis_profile=args.vis_profile)
                 logger.info(f'df.shape {df.shape}, x.shape {x.shape}')
 
                 # predict
@@ -89,7 +89,7 @@ def cropland_predict(args):
                 prepare_data(logger, dataset=f'test_{district}', feature_dir=test_dir,
                              label_path=label_path, feature_engineering=args.feature_engineering,
                              scaling=args.scaling, scaler=scaler, check_filling=False,
-                             vis_ts=args.vis_ts, vis_profile=args.vis_profile)
+                             vis_stack=args.vis_stack, vis_profile=args.vis_profile)
             # test
             model = CroplandModel(logger, log_time, args.pretrained.split('_')[-1],
                                   args.random_state, pretrained_name=args.pretrained)
@@ -108,7 +108,7 @@ if __name__ == '__main__':
                         help='Filename of the best pretrained models.')
     parser.add_argument('--random_state', type=int, default=24)
 
-    parser.add_argument('--vis_ts', type=bool, default=True)
+    parser.add_argument('--vis_stack', type=bool, default=True)
     parser.add_argument('--vis_profile', type=bool, default=True)
     parser.add_argument('--feature_engineering', type=bool, default=True)
     parser.add_argument('--scaling', type=str, default=None, choices=[None, 'standardize', 'normalize'])

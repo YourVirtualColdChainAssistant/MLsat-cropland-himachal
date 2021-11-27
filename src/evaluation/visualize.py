@@ -145,44 +145,55 @@ def plot_timestamps(timestamps, title=None, save_path=None):
         print(f'Saved time stamps to {save_path}')
 
 
-def plot_ndvi_profile(ndvi_array, df_label, timestamps_ref, title=None, save_path=None):
+def plot_profile(data, label, timestamps, veg_index, title=None, save_path=None):
     """
-    colors:
-    0 - black - no labels
-    1 - red - apples
-    2 - green - other crops
-    3 - blue - non crops
+    Plot NDVI / GNDVI / ... profile of classes as time evolving.
 
-    :param ndvi_array: np.array
-        shape (height * width, ndvi time profile)
-    :return:
+    Parameters
+    ----------
+    data: np.array
+        shape (n_data, n_weeks)
+    label: np.array
+        shape (n_data, )
+    timestamps: list
+        A list of dates (of each Monday in 2020).
+    veg_index: string
+        The name of the vegetation index to be drew.
+    title: string
+        Name of plot.
+    save_path: string
+        Path to store this plot.
+
+    Returns
+    -------
+
     """
     _ = plt.subplots(1, 1, figsize=(10, 7))
-    labels = np.unique(df_label)
-    print(f"labels = {labels}")
+    unique_label = np.unique(label)
+    veg_index = veg_index.upper()
     colors_map = {0: 'black', 1: 'tab:red', 2: 'tab:green', 3: 'tab:brown'}
     labels_map = {0: 'unlabeled', 1: 'apples', 2: 'other croplands', 3: 'non-croplands'}
 
-    mean_df = pd.DataFrame()
-    for label in labels:
-        mean = ndvi_array[df_label == label].mean(axis=0)
-        std = ndvi_array[df_label == label].std(axis=0)
-        plt.plot(timestamps_ref, mean, color=colors_map[label], label=labels_map[label])
-        plt.fill_between(timestamps_ref, mean - std, mean + std, color=colors_map[label], alpha=0.2)
-        mean_df['mean_' + str(label)] = mean
-        mean_df['std_' + str(label)] = std
+    df = pd.DataFrame()
+    for l in unique_label:
+        mean = data[label == l].mean(axis=0)
+        std = data[label == l].std(axis=0)
+        plt.plot(timestamps, mean, color=colors_map[l], label=labels_map[l])
+        plt.fill_between(timestamps, mean - std, mean + std, color=colors_map[l], alpha=0.2)
+        df['mean_' + str(l)] = mean
+        df['std_' + str(l)] = std
     plt.legend(loc='best')
     plt.ylim(0, 1)
     plt.xlabel('Time')
-    plt.ylabel('NDVI')
+    plt.ylabel(veg_index)
     if title is not None:
         plt.title(title)
-        mean_df.to_csv(f'../figs/{title}.csv', index=False)
+        df.to_csv(f'../figs/{title}.csv', index=False)
     else:
-        mean_df.to_csv('../figs/NDVI_profile.csv', index=False)
+        df.to_csv(f'../figs/{veg_index}_profile.csv', index=False)
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
-        print(f'Saved ndvi profile to {save_path}')
+        print(f'Saved {veg_index} profile to {save_path}')
 
 
 class NVDI_profile(object):
@@ -203,22 +214,22 @@ class NVDI_profile(object):
     def raw_profile(self):
         # TODO: debug, each color has three lines
         self.logger.info('Plotting raw NDVI profile...')
-        plot_ndvi_profile(self.ndvi_array_raw, self.labels, self.timestamps_raw,
-                          title='NDVI raw profile', save_path='../figs/NDVI_raw.png')
+        plot_profile(self.ndvi_array_raw, self.labels, self.timestamps_raw, 'NDVI',
+                     title='NDVI raw profile', save_path='../figs/NDVI_raw.png')
 
     def weekly_profile(self, interpolation='previous'):
         self.logger.info('Plotting weekly NDVI profile...')
         ndvi_array_weekly, _, timestamps_weekly_ref = \
             self.stack_equidistant_ndvi('weekly', interpolation)
-        plot_ndvi_profile(ndvi_array_weekly, self.labels, timestamps_weekly_ref,
-                          title='NDVI weekly profile', save_path='../figs/NDVI_weekly.png')
+        plot_profile(ndvi_array_weekly, self.labels, timestamps_weekly_ref, 'NDVI',
+                     title='NDVI weekly profile', save_path='../figs/NDVI_weekly.png')
 
     def monthly_profile(self, interpolation='previous'):
         self.logger.info('Plotting monthly NDVI profile...')
         ndvi_array_monthly, _, timestamps_monthly_ref = \
             self.stack_equidistant_ndvi('monthly', interpolation)
-        plot_ndvi_profile(ndvi_array_monthly, self.labels, timestamps_monthly_ref,
-                          title='NDVI monthly profile', save_path='../figs/NDVI_monthly.png')
+        plot_profile(ndvi_array_monthly, self.labels, timestamps_monthly_ref, 'NDVI',
+                     title='NDVI monthly profile', save_path='../figs/NDVI_monthly.png')
 
     def stack_valid_raw_ndvi(self, from_dir):
         bands_list_raw, timestamps_raw, timestamps_missing, meta = \
