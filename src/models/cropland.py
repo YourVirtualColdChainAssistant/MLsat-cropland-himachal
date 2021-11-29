@@ -45,10 +45,10 @@ class CroplandModel(BaseModel):
             impurity_importance_table(feature_names, self.model.feature_importances_, f'{model_II}')
             self._logger.info(f'  Saved impurity importance to {model_II}')
 
-    def evaluate_by_open_datasets(self, region_shp_path, pred_name=None, label_only=True):
+    def evaluate_by_open_datasets(self, region_shp_path, label_only=True):
         self._logger.info('Evaluating by open datasets...')
         ancilliary_path = 'K:/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/'
-        pred_path = f'../preds/{pred_name}.tiff' if pred_name is not None else f'../preds/{self.to_name}.tiff'
+        pred_path = f'../preds/{self.to_name}.tiff'
         district = region_shp_path.split('/')[-2].split('_')[-1]
 
         gfsad_args = {
@@ -72,21 +72,25 @@ class CroplandModel(BaseModel):
 
     def test(self, x_test, y_test, meta, index, region_shp_path, feature_names=None, pred_name=None):
         self._logger.info("## Testing")
+        if pred_name is not None:
+            self.to_name = pred_name
         # predict
         y_test_pred = self.model.predict(x_test)
         y_test_pred_converted = self.convert_partial_predictions(y_test_pred, index, meta)
-        self._save_predictions(meta, y_test_pred_converted, pred_name)
+        self._save_predictions(meta, y_test_pred_converted)
         # evaluate
         self.evaluate_by_metrics(y_test, y_test_pred)
-        self.evaluate_by_open_datasets(region_shp_path, pred_name, label_only=True)
+        self.evaluate_by_open_datasets(region_shp_path, label_only=True)
         if feature_names is not None:
             self.evaluate_by_feature_importance(x_test, y_test, feature_names)
 
     def predict(self, x, meta, region_shp_path, pred_name=None):
         self._logger.info("## Predicting")
+        if pred_name is not None:
+            self.to_name = pred_name
         y_pred = self.model.predict(x)
-        self._save_predictions(meta, y_pred, pred_name)
-        self.evaluate_by_open_datasets(region_shp_path, pred_name, label_only=False)
+        self._save_predictions(meta, y_pred)
+        self.evaluate_by_open_datasets(region_shp_path, label_only=False)
 
     def load_pretrained_model(self, pretrained_name):
         self._logger.info(f"Loading pretrained {pretrained_name}...")

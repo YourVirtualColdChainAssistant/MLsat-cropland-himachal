@@ -73,10 +73,8 @@ class BaseModel(object):
         self.model = pickle.load(open(pretrained_name, 'rb'))
         self._logger.info('  ok')
 
-    def _save_predictions(self, meta, y_preds, to_name=None):
-        if to_name is None:
-            to_name = self.to_name
-        pred_path = f'../preds/{to_name}.tiff'
+    def _save_predictions(self, meta, y_preds):
+        pred_path = f'../preds/{self.to_name}.tiff'
         save_predictions_geotiff(meta, y_preds, pred_path)
         self._logger.info(f'Saved {self.model_name.upper()} predictions to {pred_path}')
 

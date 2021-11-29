@@ -136,6 +136,7 @@ def stack_all_timestamps(logger, from_dir, meta, window=None, way='weekly', inte
         else:
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (previous)')
         logger.info(f'          filling ratio = {p_fill_list[i - 1]}')
+        # TODO: cloud and filling ratio is not correctly calculated (include pixels not test)
 
         bands_list.append(band_list)
 

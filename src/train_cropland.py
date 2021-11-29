@@ -80,7 +80,7 @@ def cropland_classification(args):
         'mlp': {'hidden_layer_sizes': (100,), 'alpha': 0.0001, 'max_iter': 200, 'activation': 'relu',
                 'early_stopping': True, 'random_state': args.random_state}
     }
-    for m in ['svc', 'rfc', 'mlp']:
+    for m in best_params.keys():
         model = CroplandModel(logger, log_time, m, args.random_state)
         if args.cv_type is None:
             model.fit_best(x_train_val, y_train_val, best_params[m])
