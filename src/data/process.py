@@ -10,29 +10,31 @@ import rasterio
 
 
 def process(args):
-    # check directory existence
     tile_dir = args.img_dir + args.tile_id + '/'
     raw_dir = tile_dir + 'raw/'
-    safe_dir = tile_dir + 'safe/'
     cloud_dir = tile_dir + 'cloud_mask/'
-    corrected_dir = tile_dir + 'corrected/'
-    geotiff_dir = tile_dir + 'geotiff/'
-    if not os.path.exists(safe_dir):
-        os.mkdir(safe_dir)
+    corrected_dir = tile_dir + 'L2A/'
+    geotiff_dir = tile_dir + 'raster/'
     if not os.path.exists(cloud_dir):
         os.mkdir(cloud_dir)
     if not os.path.exists(corrected_dir):
         os.mkdir(corrected_dir)
     if not os.path.exists(geotiff_dir):
         os.mkdir(geotiff_dir)
-
-    # process
-    # unzip_products(raw_dir, safe_dir)
-    # get_cloud_mask(safe_dir, cloud_dir)
-    # sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
+    sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
     # sen2cor_path = '../../Sen2Cor-02.09.00-win64/L2A_Process.bat'
-    # atmospheric_correction(sen2cor_path, safe_dir, corrected_dir)  # absolute path to call sen2cor
-    # merge_to_raster(corrected_dir, geotiff_dir, cloud_dir)
+    # check which level we downloaded
+    processing_level = os.listdir(raw_dir)[0].split('_')[1][3:]
+    if processing_level == 'L1C':
+        safe_dir = tile_dir + 'L1C/'
+        if not os.path.exists(safe_dir):
+            os.mkdir(safe_dir)
+        unzip_products(raw_dir, safe_dir)
+        get_cloud_mask(safe_dir, cloud_dir)
+        atmospheric_correction(sen2cor_path, safe_dir, corrected_dir)  # absolute path to call sen2cor
+    else:
+        unzip_products(raw_dir, corrected_dir)
+    merge_to_raster(corrected_dir, geotiff_dir, cloud_dir)
 
 
 def unzip_products(raw_dir, safe_dir):

@@ -25,10 +25,18 @@ def download_date(user, pwd, img_dir, tile_id, date_range):
 
     # search by polygon, time, and Hub query keywords
     # polygon = geojson.Polygon(polygon) # can download by polygon region
-    products = api.query(date=(date_range[0], date_range[1]),
-                         platformname='Sentinel-2',
-                         processinglevel='Level-1C',
-                         raw=f'tileid:{tile_id}')
+    products_L1C = api.query(date=(date_range[0], date_range[1]),
+                             platformname='Sentinel-2',
+                             processinglevel='Level-1C',
+                             raw=f'tileid:{tile_id}')
+    products_L2A = api.query(date=(date_range[0], date_range[1]),
+                             platformname='Sentinel-2',
+                             processinglevel='Level-2A',
+                             raw=f'tileid:{tile_id}')
+    if len(products_L2A) == len(products_L1C):
+        products = products_L2A
+    else:
+        products = products_L1C
     print(f'Found {len(products)} products in {date_range}')
 
     # check the number of online and offline products
