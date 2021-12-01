@@ -11,9 +11,6 @@ import shapely
 import pyproj
 import pandas as pd
 import datetime
-from src.data.feature_engineering import add_bands
-from src.utils.stack import get_weekly_timestamps, get_monthly_timestamps, choices_sanity_check
-from src.utils.util import load_geotiff, load_shp_to_array
 
 
 def normalize(array):
@@ -48,6 +45,7 @@ def show_true_color(raster, is_norm=True, save_path=None):
     plt.imshow(img_rgb)
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
 
 
 def read_n_show_true_color(raster, is_norm=True, save_path=None):
@@ -59,6 +57,7 @@ def read_n_show_true_color(raster, is_norm=True, save_path=None):
     plt.imshow(img_rgb)
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
 
 
 def get_mycmap(num_colors, cmap='Set1'):
@@ -110,6 +109,7 @@ def show_mask(classes_array, region_mask, title, windows=None, save_path=None):
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved mask to {save_path}')
+    plt.close()
 
 
 def show_sat_and_mask(img_filepath, pred, meta_src, region_mask=None, save_path=None):
@@ -131,6 +131,7 @@ def show_sat_and_mask(img_filepath, pred, meta_src, region_mask=None, save_path=
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved satellite image and its mask to {save_path}')
+    plt.close()
 
 
 def plot_timestamps(timestamps, title=None, save_path=None):
@@ -143,6 +144,7 @@ def plot_timestamps(timestamps, title=None, save_path=None):
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved time stamps to {save_path}')
+    plt.close()
 
 
 def plot_profile(data, label, timestamps, veg_index, title=None, save_path=None):
@@ -194,107 +196,8 @@ def plot_profile(data, label, timestamps, veg_index, title=None, save_path=None)
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved {veg_index} profile to {save_path}')
-
-
-class NVDI_profile(object):
-    """
-    This is a class for plotting different kinds of NDVI profiles.
-    When aggregating, always take the maximal value within a period.
-    """
-
-    def __init__(self, logger, from_dir, label_shp_path):
-        self.logger = logger
-        self.logger.info('--- NDVI profile ---')
-        self.ndvi_array_raw, self.timestamps_raw, self.meta = \
-            self.stack_valid_raw_ndvi(from_dir)
-        # get labels
-        _, train_labels = load_shp_to_array(label_shp_path, self.meta)
-        self.labels = train_labels.reshape(-1)
-
-    def raw_profile(self):
-        # TODO: debug, each color has three lines
-        self.logger.info('Plotting raw NDVI profile...')
-        plot_profile(self.ndvi_array_raw, self.labels, self.timestamps_raw, 'NDVI',
-                     title='NDVI raw profile', save_path='../figs/NDVI_raw.png')
-
-    def weekly_profile(self, interpolation='previous'):
-        self.logger.info('Plotting weekly NDVI profile...')
-        ndvi_array_weekly, _, timestamps_weekly_ref = \
-            self.stack_equidistant_ndvi('weekly', interpolation)
-        plot_profile(ndvi_array_weekly, self.labels, timestamps_weekly_ref, 'NDVI',
-                     title='NDVI weekly profile', save_path='../figs/NDVI_weekly.png')
-
-    def monthly_profile(self, interpolation='previous'):
-        self.logger.info('Plotting monthly NDVI profile...')
-        ndvi_array_monthly, _, timestamps_monthly_ref = \
-            self.stack_equidistant_ndvi('monthly', interpolation)
-        plot_profile(ndvi_array_monthly, self.labels, timestamps_monthly_ref, 'NDVI',
-                     title='NDVI monthly profile', save_path='../figs/NDVI_monthly.png')
-
-    def stack_valid_raw_ndvi(self, from_dir):
-        bands_list_raw, timestamps_raw, timestamps_missing, meta = \
-            self.stack_valid_raw_timestamps(self.logger, from_dir)
-        bands_array_raw = add_bands(self.logger, np.stack(bands_list_raw, axis=2), new_bands_name=['ndvi'])
-        ndvi_array_raw = bands_array_raw[:, -1, :]
-        return ndvi_array_raw, timestamps_raw, meta
-
-    @staticmethod
-    def stack_valid_raw_timestamps(logger, from_dir):
-        logger.info('Stacking valid raw timestamps...')
-        bands_list_valid, timestamps_valid, timestamps_missing = [], [], []
-        for filename in sorted([f for f in os.listdir(from_dir) if f.endswith('tiff')]):
-            raster_filepath = from_dir + filename
-            band, meta = load_geotiff(raster_filepath)
-            # pixel values check
-            if np.array(band).mean() != 0.0:
-                bands_list_valid.append(np.stack(band, axis=2).reshape(-1, len(band)))
-                timestamps_valid.append(datetime.datetime.strptime(re.split('[_.]', filename)[-2],
-                                                                   '%Y%m%dT%H%M%S%f').date())
-            else:
-                timestamps_missing.append(datetime.datetime.strptime(re.split('[_.]', filename)[-2],
-                                                                     '%Y%m%dT%H%M%S%f').date())
-                logger.info(f'  Discard {filename} due to empty value.')
-        logger.info('Stack done!')
-
-        return bands_list_valid, timestamps_valid, timestamps_missing, meta
-
-    def stack_equidistant_ndvi(self, way, interpolation='previous'):
-        choices_sanity_check(['weekly', 'monthly'], way, 'way')
-        if way == 'weekly':
-            timestamps_af = [ts - datetime.timedelta(days=ts.weekday()) for ts in
-                             self.timestamps_raw]  # datetime.weekday() returns 0~6
-            timestamps_ref = get_weekly_timestamps()
-        else:
-            timestamps_af = [ts - datetime.timedelta(days=ts.day - 1) for ts in
-                             self.timestamps_raw]  # datetime.day returns 1-31
-            timestamps_ref = get_monthly_timestamps()
-
-        # stack equidistantly
-        timestamps_af_pd = pd.Series(timestamps_af)
-        ndvi_list_eql = []
-        for i, timestamp in enumerate(timestamps_ref, start=1):
-            # get all the indices
-            ids = list(timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index)
-            # with non-empty data
-            if len(ids) != 0:
-                ndvi_array = self.ndvi_array_raw[:, ids].max(axis=1)
-                # format printing
-                print_str = ''
-                for id in ids:
-                    print_str += f'{self.timestamps_raw[id].strftime("%Y-%m-%d")}, '
-                self.logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} ({print_str})')
-            else:
-                if interpolation == 'zero' or i == 1:
-                    ndvi_array = np.zeros(self.meta['height'] * self.meta['width'])
-                    self.logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (0)')
-                else:
-                    ndvi_array = ndvi_list_eql[-1]
-                    self.logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (previous)')
-            ndvi_list_eql.append(ndvi_array)
-        ndvi_array_eql = np.stack(ndvi_list_eql, axis=1)
-
-        return ndvi_array_eql, timestamps_af, timestamps_ref
-
+    plt.close()
+    
 
 def visualize_cv_fold(grid, meta, save_path):
     shapes = iter([(shapely.geometry.mapping(poly), v + 1) for poly, v in zip(grid.geometry, grid.fold_id)])

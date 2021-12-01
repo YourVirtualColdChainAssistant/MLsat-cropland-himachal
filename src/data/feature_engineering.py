@@ -12,6 +12,7 @@ def calculate_ndvi(red, nir):
     return ndvi
 
 
+# TODO: vegetation indexes which utilize low-resolution bands
 def calculate_ndre(red_edge, nir):
     ndre = (nir - red_edge) / (nir + red_edge + 1e-12)
     return ndre
@@ -40,6 +41,16 @@ def add_bands(logger, img, new_bands_name=['ndvi']):
     band03 = green --> idx = 1
     band04 = red --> idx = 2
     band08 = nir --> idx = 3
+
+    Parameters
+    ----------
+    logger
+    img: shape (height, width, n_bands, n_weeks)
+    new_bands_name
+
+    Returns
+    -------
+
     """
     if new_bands_name is None:
         logger.info('No band is added.')
@@ -49,10 +60,10 @@ def add_bands(logger, img, new_bands_name=['ndvi']):
         new_bands = []
 
         # bands
-        blue = img[:, 0, :]
-        green = img[:, 1, :]
-        red = img[:, 2, :]
-        nir = img[:, 3, :]
+        blue = img[:, :, 0, :]
+        green = img[:, :, 1, :]
+        red = img[:, :, 2, :]
+        nir = img[:, :, 3, :]
 
         # add feature
         for new_band_name in new_bands_name:
@@ -66,7 +77,7 @@ def add_bands(logger, img, new_bands_name=['ndvi']):
                 new_bands.append(calculate_cvi(green, red, nir))
         logger.info('  ok')
 
-        return np.append(img, np.stack(new_bands, axis=1), axis=1)
+        return np.append(img, np.stack(new_bands, axis=2), axis=2)
 
 
 def get_raw_every_n_weeks(logger, bands_name, n_weeks, bands_array, n=4):
@@ -75,10 +86,10 @@ def get_raw_every_n_weeks(logger, bands_name, n_weeks, bands_array, n=4):
     Parameters
     ----------
     logger
-    bands_name: ndarray
-        shape (n_pixels, n_bands, n_weeks)
+    bands_name
     n_weeks
-    bands_array
+    bands_array: np.array
+        shape (n_pixels, n_bands, n_weeks)
     n
 
     Returns
@@ -135,6 +146,21 @@ def get_difference_by_band(band_name, n_weeks, bands_array):
 
 
 def get_difference(logger, bands_name, n_weeks, bands_array):
+    """
+
+    Parameters
+    ----------
+    logger
+    bands_name: list of string
+        A list of new bands name.
+    n_weeks: int
+    bands_array: np.array
+        shape (n_pixels, n_new_bands, n_weeks)
+
+    Returns
+    -------
+
+    """
     logger.info("Adding difference...")
     df_new_list = []
     for i, band_name in enumerate(bands_name):

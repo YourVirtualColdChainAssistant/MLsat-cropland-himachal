@@ -22,16 +22,16 @@ def cropland_predict(args):
     logger.info(args)
 
     logger.info('#### Test Cropland Model')
-    train_val_dir = args.img_dir + '43SFR/geotiff/' if not testing else args.img_dir + '43SFR/geotiff_sample/'
-    test_near_dir = args.img_dir + '43SFR/geotiff/' if not testing else args.img_dir + '43SFR/geotiff_sample/'
-    test_far_dir = args.img_dir + '43RGQ/geotiff/' if not testing else args.img_dir + '43RGQ/geotiff_sample/'
-    predict_dir = args.img_dir + args.tile_id + '/geotiff/' if not testing else args.img_dir + args.tile_id + '/geotiff_sample/'
+    train_val_dir = args.img_dir + '43SFR/raster/' if not testing else args.img_dir + '43SFR/raster_sample/'
+    test_near_dir = args.img_dir + '43SFR/raster/' if not testing else args.img_dir + '43SFR/raster_sample/'
+    test_far_dir = args.img_dir + '43RGQ/raster/' if not testing else args.img_dir + '43RGQ/raster_sample/'
+    predict_dir = args.img_dir + args.tile_id + '/raster/' if not testing else args.img_dir + args.tile_id + '/raster_sample/'
 
     # _, _, _, _, _, scaler, _, _, _ = \
-    #     prepare_data(logger, dataset='train_val', feature_dir=train_val_dir,
+    #     prepare_data(logger=logger, dataset='train_val', feature_dir=train_val_dir, task='cropland', window=None,
     #                  label_path='../data/train_labels/train_labels.shp',
-    #                  feature_engineering=args.feature_engineering,
-    #                  scaling=args.scaling,
+    #                  feature_engineering=args.feature_engineering, scaling=args.scaling, smooth=args.smooth,
+    #                  fill_missing=args.fill_missing, check_missing=False,
     #                  vis_stack=False, vis_profile=False)
     scaler = None
 
@@ -58,8 +58,10 @@ def cropland_predict(args):
 
                 # prepare data
                 df, x, meta, n_feature, feature_names = \
-                    prepare_data(logger, dataset='predict', feature_dir=predict_dir, label_path=None, window=window,
+                    prepare_data(logger=logger, dataset='predict', feature_dir=predict_dir,
+                                 label_path=None, window=window, task='cropland', smooth=args.smooth,
                                  feature_engineering=args.feature_engineering, scaling=args.scaling, scaler=scaler,
+                                 fill_missing=args.fill_missing, check_missing=True,
                                  vis_stack=args.vis_stack, vis_profile=args.vis_profile)
                 logger.info(f'df.shape {df.shape}, x.shape {x.shape}')
 
@@ -85,10 +87,11 @@ def cropland_predict(args):
             test_dir = test_dir_dict[district]
             label_path = f'../data/test_labels_{district}/test_labels_{district}.shp'
             # prepare data
-            _, df_test, x_test, y_test, _, _, meta, n_feature, feature_names = \
-                prepare_data(logger, dataset=f'test_{district}', feature_dir=test_dir,
-                             label_path=label_path, feature_engineering=args.feature_engineering,
-                             scaling=args.scaling, scaler=scaler, check_filling=False,
+            _, df_test, x_test, y_test, _, _, _, meta, n_feature, feature_names = \
+                prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
+                             label_path=label_path, window=None, task='cropland',
+                             feature_engineering=args.feature_engineering, scaling=args.scaling, scaler=scaler,
+                             fill_missing=args.fill_missing, check_missing=True, smooth=args.smooth,
                              vis_stack=args.vis_stack, vis_profile=args.vis_profile)
             # test
             model = CroplandModel(logger, log_time, args.pretrained.split('_')[-1],
@@ -111,7 +114,9 @@ if __name__ == '__main__':
     parser.add_argument('--vis_stack', type=bool, default=True)
     parser.add_argument('--vis_profile', type=bool, default=True)
     parser.add_argument('--feature_engineering', type=bool, default=True)
-    parser.add_argument('--scaling', type=str, default=None, choices=[None, 'standardize', 'normalize'])
+    parser.add_argument('--smooth', type=bool, default=False)
+    parser.add_argument('--scaling', type=str, default=None, choices=[None, 'to_TOA', 'standardize', 'normalize'])
+    parser.add_argument('--fill_missing', type=str, default='forward', choices=[None, 'forward', 'linear'])
 
     args = parser.parse_args()
 

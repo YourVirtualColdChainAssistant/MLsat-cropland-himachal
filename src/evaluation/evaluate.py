@@ -73,8 +73,8 @@ def evaluate_by_gfsad(pred_path, dataset_path, logger=None):
 
     """
     # load data
-    band_pred, meta_pred = load_geotiff(pred_path, as_float=False)
-    band_dataset, meta_dataset = load_geotiff(dataset_path, as_float=False)
+    band_pred, meta_pred = load_geotiff(pred_path, read_as='as_raw')
+    band_dataset, meta_dataset = load_geotiff(dataset_path, read_as='as_raw')
     band_pred = band_pred[0]
     band_dataset = band_dataset[0]
 
@@ -110,8 +110,8 @@ def evaluate_by_copernicus(pred_path, dataset_path, logger=None):
 
     """
     # load data
-    band_pred, meta_pred = load_geotiff(pred_path, as_float=False)
-    band_dataset, meta_dataset = load_geotiff(dataset_path, as_float=False)
+    band_pred, meta_pred = load_geotiff(pred_path, read_as='as_raw')
+    band_dataset, meta_dataset = load_geotiff(dataset_path, read_as='as_raw')
     band_pred = band_pred[0]
     band_dataset = band_dataset[0]
 

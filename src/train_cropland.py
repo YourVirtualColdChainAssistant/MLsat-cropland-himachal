@@ -11,7 +11,7 @@ from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 
 def cropland_classification(args):
-    testing = True
+    testing = False
 
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
@@ -21,18 +21,18 @@ def cropland_classification(args):
 
     logger.info('#### Cropland Classification')
     clean_train_shapefiles()
-    feature_dir = args.img_dir + args.tile_id + '/geotiff/' if not testing else args.img_dir + args.tile_id + '/geotiff_sample/'
+    feature_dir = args.img_dir + args.tile_id + '/raster/' if not testing else args.img_dir + args.tile_id + '/raster_sample/'
 
     # prepare train and validation dataset
-    df_tv, df_train_val, x_train_val, y_train_val, polygons, scaler, meta, n_feature, feature_names = \
-        prepare_data(logger, dataset='train_val', feature_dir=feature_dir,
+    df_tv, df_train_val, x_train_val, y_train_val, polygons, _, scaler, meta, n_feature, feature_names = \
+        prepare_data(logger=logger, dataset='train_val', feature_dir=feature_dir, task='cropland', window=None,
                      label_path='../data/train_labels/train_labels.shp',
-                     feature_engineering=args.feature_engineering,
-                     scaling=args.scaling, check_filling=True,
+                     feature_engineering=args.feature_engineering, scaling=args.scaling, smooth=args.smooth,
+                     fill_missing=args.fill_missing, check_missing=True,
                      vis_stack=args.vis_stack, vis_profile=args.vis_profile)
     coords_train_val = gpd.GeoDataFrame({'geometry': df_train_val.coords.values})
     x = df_tv.iloc[:, :n_feature].values
-    if args.scaling is not None:
+    if args.scaling == 'standardize' or args.scaling == 'normalize':
         x = scaler.transform(x)
         logger.info('Transformed all x')
 
@@ -115,14 +115,18 @@ if __name__ == '__main__':
     parser.add_argument('--n_fold', type=int, default=3)
     parser.add_argument('--random_state', type=int, default=24)
 
-    parser.add_argument('--vis_stack', type=bool, default=True)
-    parser.add_argument('--vis_profile', type=bool, default=True)
-    parser.add_argument('--feature_engineering', type=bool, default=True)
-    parser.add_argument('--smooth_band', type=bool, default=False)
-    parser.add_argument('--scaling', type=str, default=None, choices=[None, 'standardize', 'normalize'])
     # hyper parameter
     parser.add_argument('--hp_search_by', type=str, default='grid', choices=['random', 'grid'],
                         help='Method to find hyper-parameters.')
+
+    # prepare data
+    parser.add_argument('--vis_stack', type=bool, default=False)
+    parser.add_argument('--vis_profile', type=bool, default=True)
+    parser.add_argument('--feature_engineering', type=bool, default=True)
+    parser.add_argument('--smooth', type=bool, default=False)
+    parser.add_argument('--scaling', type=str, default='as_TOA',
+                        choices=['as_float', 'as_TOA', 'standardize', 'normalize'])
+    parser.add_argument('--fill_missing', type=str, default='linear', choices=[None, 'forward', 'linear'])
 
     args = parser.parse_args()
 

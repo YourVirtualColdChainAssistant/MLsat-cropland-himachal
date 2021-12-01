@@ -1,7 +1,5 @@
 import os
-
 import fiona
-import pickle
 import shapely
 import numpy as np
 import pandas as pd
@@ -11,7 +9,7 @@ import rasterio
 from rasterio.windows import Window
 
 
-def load_geotiff(path, window=None, as_float=True):
+def load_geotiff(path, window=None, read_as='as_raw'):
     """ Load the geotiff as a list of numpy array.
         INPUT : path (str) -> the path to the geotiff
                 window (rasterio.windows.Window) -> the window to use when loading the image
@@ -19,8 +17,10 @@ def load_geotiff(path, window=None, as_float=True):
                  meta (dictionary) -> the metadata associated with the geotiff
     """
     with rasterio.open(path) as f:
-        if as_float:
+        if read_as == 'as_float':
             band = [skimage.img_as_float(f.read(i + 1, window=window)) for i in range(f.count)]
+        elif read_as == 'as_TOA':
+            band = [f.read(i + 1, window=window) / 10000 for i in range(f.count)]
         else:  # normal read
             band = [f.read(i + 1, window=window) for i in range(f.count)]
         meta = f.meta
@@ -62,7 +62,7 @@ def load_shp_to_array(shp_path, meta):
     img = rasterio.features.rasterize(iterable, out_shape=(meta['height'], meta['width']),
                                       transform=meta['transform'])
     print('  ok')
-    return features_list, img
+    return features_list, val_list, img
 
 
 def convert_gdf_to_shp(data, save_path):
@@ -116,36 +116,6 @@ def multipolygons_to_polygons(shp_file):
     return polygons_df
 
 
-def correct_predictions():
-    pass
-
-
-def resample_negatives(pos, neg):
-    pass
-
-
-def get_cropland_mask(df, n_feature, pretrained_name):
-    # read pretrained model
-    trained_model = pickle.load(open(f'../models/{pretrained_name}.sav', 'rb'))
-
-    # new columns
-    df['gt_cropland'] = 0
-    df.loc[(df.label.values == 1) | (df.label.values == 2), 'gt_cropland'] = 1
-
-    # cropland
-    to_pred_mask = df.label.values == 0
-    preds = trained_model.predict(df.iloc[to_pred_mask, :n_feature].values)
-    cropland_pred = np.empty_like(preds)
-    cropland_pred[preds == 2] = 1
-    cropland_pred[preds == 3] = 0
-    df['gp_cropland'] = df['gt_cropland'].copy()
-    df.loc[to_pred_mask, 'gp_cropland'] = cropland_pred
-    df['gp_cropland_mask'] = False
-    df.loc[df.gp_cropland.values == 1, 'gp_cropland_mask'] = True
-
-    return df.gp_cropland_mask.values
-
-
 def save_cv_results(res, save_path):
     df = pd.DataFrame()
     df['mean_fit_time'] = res['mean_fit_time']
@@ -182,40 +152,17 @@ def merge_tiles(path_list, out_path, bounds=None):
         dst.write(mosaic)
 
 
-def get_neighbors(idx, nodes, height, width):
-    if idx not in nodes:
-        nodes += [idx]
-    points = np.arange(height * width).reshape(height, width)
-    row, col = np.where(points == idx)
-    row, col = row[0], col[0]
-    if row == 0:
-        row_start, row_end = row, row + 2
-    elif row == height - 1:
-        row_start, row_end = row - 1, None
-    else:
-        row_start, row_end = row - 1, row + 2
-    if col == 0:
-        col_start, col_end = col, col + 2
-    elif col == width - 1:
-        col_start, col_end = col - 1, None
-    else:
-        col_start, col_end = col - 1, col + 2
-    grid3x3 = points[row_start:row_end, col_start:col_end].reshape(-1)
-    neighbors = [p for p in grid3x3 if p in nodes and p != idx]
-    return neighbors
-
-
-def prepare_meta_window(geotiff_dir, label_path):
+def prepare_meta_window_descriptions(geotiff_dir, label_path):
     img_path = geotiff_dir + os.listdir(geotiff_dir)[0]
     img = rasterio.open(img_path)
-    transform, dst_crs = img.transform, img.crs
+    transform, dst_crs, descriptions = img.transform, img.crs, img.descriptions
 
     label_shp = gpd.read_file(label_path)
     label_shp = label_shp.to_crs(dst_crs)
     window = get_window(transform, label_shp.total_bounds)
 
-    _, meta = load_geotiff(img_path, window, as_float=False)
-    return meta, window
+    _, meta = load_geotiff(img_path, window, read_as='as_raw')
+    return meta, window, descriptions
 
 
 def get_window(transform, bounds):
