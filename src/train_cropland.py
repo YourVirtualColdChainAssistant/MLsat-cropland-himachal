@@ -1,6 +1,6 @@
 import argparse
 import datetime
-import skgstat as skg
+# import skgstat as skg
 import numpy as np
 import geopandas as gpd
 from src.data.prepare_data import prepare_data, construct_grid_to_fold, clean_train_shapefiles
@@ -28,7 +28,7 @@ def cropland_classification(args):
         prepare_data(logger=logger, dataset='train_val', feature_dir=feature_dir, task='cropland', window=None,
                      label_path='../data/train_labels/train_labels.shp',
                      feature_engineering=args.feature_engineering, scaling=args.scaling, smooth=args.smooth,
-                     fill_missing=args.fill_missing, check_missing=True,
+                     fill_missing=args.fill_missing, check_missing=args.check_missing,
                      vis_stack=args.vis_stack, vis_profile=args.vis_profile)
     coords_train_val = gpd.GeoDataFrame({'geometry': df_train_val.coords.values})
     x = df_tv.iloc[:, :n_feature].values
@@ -36,19 +36,20 @@ def cropland_classification(args):
         x = scaler.transform(x)
         logger.info('Transformed all x')
 
-    # TODO: draw more pairs below 5km, see the values of auto-correlation
-    # TODO: how many pixels are we moving if use buffer_radius=3km as suggested in the semi-variogram
-    # visualize autocorrelation
-    sample_ids_equal = np.linspace(0, df_train_val.shape[0], num=2000, dtype=int, endpoint=False)
-    sample_ids_near = np.arange(2000)
-    # equal
-    coords_xy = np.array([[coord.x, coord.y] for coord in df_train_val.coords.values])
-    variogram_equal = skg.Variogram(coords_xy[sample_ids_equal], df_train_val.gt_cropland.values[sample_ids_equal])
-    variogram_equal.plot().savefig('../figs/semivariogram_equal.png', bbox_inches='tight')
-    # near
-    variogram_near = skg.Variogram(coords_xy[sample_ids_near], df_train_val.gt_cropland.values[sample_ids_near])
-    variogram_near.plot().savefig('../figs/semivariogram_near.png', bbox_inches='tight')
-    logger.info('Saved semivariogram')
+    # if args.check_autocorrelation:
+    #     # TODO: draw more pairs below 5km, see the values of auto-correlation
+    #     # TODO: how many pixels are we moving if use buffer_radius=3km as suggested in the semi-variogram
+    #     # visualize autocorrelation
+    #     sample_ids_equal = np.linspace(0, df_train_val.shape[0], num=2000, dtype=int, endpoint=False)
+    #     sample_ids_near = np.arange(2000)
+    #     # equal
+    #     coords_xy = np.array([[coord.x, coord.y] for coord in df_train_val.coords.values])
+    #     variogram_equal = skg.Variogram(coords_xy[sample_ids_equal], df_train_val.gt_cropland.values[sample_ids_equal])
+    #     variogram_equal.plot().savefig('../figs/semivariogram_equal.png', bbox_inches='tight')
+    #     # near
+    #     variogram_near = skg.Variogram(coords_xy[sample_ids_near], df_train_val.gt_cropland.values[sample_ids_near])
+    #     variogram_near.plot().savefig('../figs/semivariogram_near.png', bbox_inches='tight')
+    #     logger.info('Saved semivariogram')
 
     # TODO: how to use semi-variogram or other statistics in practice
     # TODO: why to study the effects of buffer radius
@@ -94,12 +95,13 @@ def cropland_classification(args):
         # predict and evaluation
         model.test(x_train_val, y_train_val, meta, index=df_train_val.index,
                    region_shp_path='../data/train_labels/train_labels.shp',
-                   feature_names=feature_names, pred_name=f'{log_time}_{m}_train')
+                   feature_names=None, pred_name=f'{log_time}_{m}_train')
         model.predict(x, meta, region_shp_path='../data/train_region/train_region.shp')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    # TODO: add a configuration file and save with the same file name
     parser.add_argument('--img_dir', type=str,
                         default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/',
                         help='Base directory to all the images.')
@@ -124,9 +126,11 @@ if __name__ == '__main__':
     parser.add_argument('--vis_profile', type=bool, default=True)
     parser.add_argument('--feature_engineering', type=bool, default=True)
     parser.add_argument('--smooth', type=bool, default=False)
-    parser.add_argument('--scaling', type=str, default='as_TOA',
+    parser.add_argument('--scaling', type=str, default='as_float',
                         choices=['as_float', 'as_TOA', 'standardize', 'normalize'])
     parser.add_argument('--fill_missing', type=str, default='linear', choices=[None, 'forward', 'linear'])
+    parser.add_argument('--check_missing', type=bool, default=False)
+    parser.add_argument('--check_autocorrelation', type=bool, default=False)
 
     args = parser.parse_args()
 

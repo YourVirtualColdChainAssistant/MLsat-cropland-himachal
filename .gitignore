@@ -1,5 +1,4 @@
-data_cv/
-
+*.pkl
 .idea
 *.tif
 *.tiff

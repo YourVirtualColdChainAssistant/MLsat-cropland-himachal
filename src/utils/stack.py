@@ -59,7 +59,7 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
                 cloudy_mask = band[idx_cloud] != 0
                 nodata_mask = band[idx_other[0]] == 0
                 nodata_mask_list.append(nodata_mask)
-                band = band[idx_other]
+                band = np.array(band)[idx_other]
                 # fill pixels with clouds as 0
                 for j in range(len(band)):
                     band[j][cloudy_mask & (~nodata_mask)] = 0

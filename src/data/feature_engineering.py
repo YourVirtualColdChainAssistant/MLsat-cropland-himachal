@@ -33,7 +33,7 @@ def calculate_cvi(green, red, nir):
     return cvi
 
 
-def add_bands(logger, img, new_bands_name=['ndvi']):
+def add_bands(logger, img, descriptions, new_bands_name=['ndvi']):
     """
     Add new features to the original bands.
 
@@ -46,6 +46,7 @@ def add_bands(logger, img, new_bands_name=['ndvi']):
     ----------
     logger
     img: shape (height, width, n_bands, n_weeks)
+    descriptions
     new_bands_name
 
     Returns
@@ -59,11 +60,18 @@ def add_bands(logger, img, new_bands_name=['ndvi']):
         logger.info(f'Adding new bands {new_bands_name}...')
         new_bands = []
 
+        band_map = {
+            'blue': 'B02',
+            'green': 'B03',
+            'red': 'B04',
+            'nir': 'B08'
+        }
+
         # bands
-        blue = img[:, :, 0, :]
-        green = img[:, :, 1, :]
-        red = img[:, :, 2, :]
-        nir = img[:, :, 3, :]
+        blue = img[:, :, descriptions.index(band_map['blue']), :]
+        green = img[:, :, descriptions.index(band_map['green']), :]
+        red = img[:, :, descriptions.index(band_map['red']), :]
+        nir = img[:, :, descriptions.index(band_map['nir']), :]
 
         # add feature
         for new_band_name in new_bands_name:

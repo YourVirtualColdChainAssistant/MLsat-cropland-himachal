@@ -1,40 +1,38 @@
 import argparse
 import datetime
 import numpy as np
-
-from src.utils.util import get_log_dir, get_logger, get_grid_idx, count_classes, get_cropland_mask
-from src.data.prepare_data import Pipeline, train_test_split, get_spatial_cv_fold, get_unlabeled_data
-from src.models.base_model import ModelCropSpecific
-from src.evaluation.evaluate import visualize_train_test_grid_split
+import geopandas as gpd
+from src.utils.logger import get_log_dir, get_logger
+from src.utils.util import count_classes
+from src.data.prepare_data import prepare_data, construct_grid_to_fold, get_spatial_cv_fold, get_unlabeled_data
+from src.models.crop import CropModel
+from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 
 def classifier_apples(args):
+    testing = True
     # logger
     now = datetime.datetime.now().strftime("%m%d-%H%M%S")
-    log_time = args.base_name.split('_')[0]
-    base_model_name = args.base_name.split('_')[1]
-    logger = get_logger(get_log_dir(), __name__,
-                        f'{now}_apples_w_{args.base_name}.log', level='INFO')
+    log_time, cropland_model_name = args.cropland_filename.split('_')
+    log_filename = f'apples_{now}_on_{args.cropland_filename}.log' if not testing else f'apples_testing_{now}_on_{args.cropland_filename}.log'
+    logger = get_logger(get_log_dir(), __name__, log_filename, level='INFO')
     logger.info(args)
+
     logger.info('----- Crop-specific Classification -----')
-    from_dir = args.images_dir + 'clip_new_labels/'
+    feature_dir = args.img_dir + args.tile_id + 'raster/' if not testing else args.img_dir + args.tile_id + 'raster_sample/'
 
-    # follow pipeline
-    pipe = Pipeline(logger, from_dir)
-    df = pipe.pipeline()
-    meta = pipe.meta
-    num_feature = df.columns.shape[0] - 1
-    x = df.iloc[:, :num_feature].values
-
-    # add new columns that are useful for Apples Classification
-    if args.dataset_split_by == 'spatial':
-        logger.info('Getting the grid idx...')
-        df['grid_idx'] = list(get_grid_idx(args.grid_size, meta['height'], meta['width']).reshape(-1))
-        logger.info('  ok')
-    logger.info('Getting cropland mask...')
-    cropland_mask = get_cropland_mask(df, num_feature, args.base_name)
-    count_classes(logger, cropland_mask)
-    logger.info('  ok')
+    # prepare train and validation dataset
+    df_tv, df_train_val, x_train_val, y_train_val, polygons, scaler, meta, n_feature, feature_names = \
+        prepare_data(logger, dataset='train_val', feature_dir=feature_dir,
+                     label_path='../data/train_labels/train_labels.shp',
+                     feature_engineering=args.feature_engineering,
+                     scaling=args.scaling, check_filling=True,
+                     vis_stack=args.vis_stack, vis_profile=args.vis_profile)
+    coords_train_val = gpd.GeoDataFrame({'geometry': df_train_val.coords.values})
+    x = df_tv.iloc[:, :n_feature].values
+    if args.scaling is not None:
+        x = scaler.transform(x)
+        logger.info('Transformed all x')
 
     # train val test split
     if args.train_from == 'cropland':
@@ -68,26 +66,26 @@ def classifier_apples(args):
                                             f'../figs/apples_{args.grid_size}_train_val_test_split_{args.random_seed}.tiff')
             logger.info('Saved train-val-test evaluation.')
 
-    # ### models
-    # ## OC-SVM
-    ocsvm = ModelCropSpecific(logger, log_time, 'ocsvm')
-    # # choose from
-    # grid search
-    # if args.dataset_split_by == 'random':
-    #     ocsvm.find_best_parameters(x_train_val_pos, y_train_val_pos, search_by=args.cv_search_by)
-    # else:
-    #     ocsvm.find_best_parameters(x_train_val_pos, y_train_val_pos, search_by=args.cv_search_by,
-    #                                cv=data_cv_pos)
-    # ocsvm.fit_and_save_best_model(x_train_val_pos, y_train_val_pos)
-    # fit known best parameters
-    ocsvm.fit_and_save_best_model(x_train_val_pos, y_train_val_pos, {'gamma': 'scale', 'kernel': 'rbf', 'nu': 0.5})
-    # predict and evaluation
-    ocsvm.evaluate(x_test, y_test)
-    ocsvm.predict_and_save(x, meta)  # predict from scratch
-    ocsvm.predict_and_save(x, meta, cropland_mask)
+    # model
+    # best_params = {
+    #     'ocsvm': {'gamma': 'scale', 'kernel': 'rbf', 'nu': 0.5}
+    # }
+    # for m in best_params.keys():
+    #     model = ModelCropSpecific(logger, log_time, m)
+    #     if args.cv_type is None:
+    #         model.fit_best(x_train_val_pos, y_train_val_pos, best_params[m])
+    #     elif args.cv_type == 'random':
+    #         model.find_best_params(x_train_val_pos, y_train_val_pos, search_by=args.cv_search_by)
+    #         model.fit_best(x_train_val_pos, y_train_val_pos)
+    #     else:  # cv_type == 'block'
+    #         model.find_best_params(x_train_val_pos, y_train_val_pos, search_by=args.cv_search_by, cv=data_cv_pos)
+    #         model.fit_best(x_train_val_pos, y_train_val_pos)
+    #     model.test(x_train_val_pos, y_train_val_pos, meta)
+    #     model.predict(x, meta)  # predict from scratch
+    #     model.predict(x, meta, cropland_mask)
 
     # ## PUL
-    pul = ModelCropSpecific(logger, log_time, 'pul')
+    pul = CropModel(logger, log_time, 'pul')
     # # choose from
     # grid search
     if args.dataset_split_by == 'spatial':
@@ -188,20 +186,30 @@ def classifier_apples(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--images_dir', type=str,
+    parser.add_argument('--img_dir', type=str,
                         default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/',
                         help='Base directory to all the images.')
-    parser.add_argument('--base_name', type=str, default='1023-162137_rfc',
-                        help='Filenames of pretrained models.')
-    parser.add_argument('--dataset_split_by', type=str, default='spatial', choices=['random', 'spatial'],
-                        help='Method to split train-val-test dataset.')
-    parser.add_argument('--cv_search_by', type=str, default='grid', choices=['random', 'grid'],
-                        help='Method to do cross validation.')
-    parser.add_argument('--grid_size', type=int, default=64,
-                        help='Size of grid during spatial split.')
-    parser.add_argument('--random_seed', type=int, default=22,
-                        help='Random see for train_test_split.')
+    parser.add_argument('--tile_id', type=str, default='43SFR')
+    parser.add_argument('--cropland_filename', type=str, default='1119-224829_svc',
+                        help='Filename of pretrained cropland classification model.')
+
+    # cross validation
+    parser.add_argument('--cv_type', type=str, default=None, choices=[None, 'random', 'block', 'spatial'],
+                        help='Method of cross validation.')
+    parser.add_argument('--tiles_x', type=int, default=4)
+    parser.add_argument('--tiles_y', type=int, default=4)
+    parser.add_argument('--shape', type=str, default='square')
+    parser.add_argument('--buffer_radius', type=int, default=0)  # TODO: buffer changes to meter
+    parser.add_argument('--n_fold', type=int, default=3)
+    parser.add_argument('--random_state', type=int, default=24)
+
+    # hyper parameter
+    parser.add_argument('--hp_search_by', type=str, default='grid', choices=['random', 'grid'],
+                        help='Method to find hyper-parameters.')
+
     parser.add_argument('--train_from', type=str, default='cropland', choices=['scratch', 'cropland'],
                         help='Crop-specific classification can be trained either from scratch or cropland map.')
+
     args = parser.parse_args()
+
     classifier_apples(args)

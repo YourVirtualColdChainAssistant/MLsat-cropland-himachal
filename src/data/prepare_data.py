@@ -97,7 +97,7 @@ def prepare_data(logger, dataset, feature_dir, label_path, task, window=None,
     bands_name = list(descriptions)
     bands_name.remove('cloud mask')
     if new_bands_name:
-        bands_array = add_bands(logger, bands_array, new_bands_name)
+        bands_array = add_bands(logger, bands_array, descriptions, new_bands_name)
         bands_name += new_bands_name
         meta.update(count=meta['count'] + len(new_bands_name))
     df = build_features(logger, bands_array, feature_engineering, timestamps_weekly_ref, bands_name=bands_name)
@@ -128,7 +128,7 @@ def prepare_data(logger, dataset, feature_dir, label_path, task, window=None,
                 else:
                     name = f"{b.upper()}_{way}_profile_{dataset}"
                     name_s = f"{b.upper()}_smoothed_{way}_profile_{dataset}"
-                    b_arr_smoothed = smooth_raw_bands(np.expand_dims(b_arr, axis=2))
+                    b_arr_smoothed = smooth_raw_bands(np.expand_dims(b_arr.copy(), axis=2))
                     plot_profile(data=b_arr_smoothed.reshape(-1, len(timestamps_weekly_ref)),
                                  label=df.label.values, timestamps=timestamps_weekly_ref,
                                  veg_index=b, title=name_s.replace('_', ' '), save_path=f"../figs/{name_s}.png")
@@ -155,12 +155,8 @@ def prepare_data(logger, dataset, feature_dir, label_path, task, window=None,
                 elif scaling == 'standardize':
                     scaler = StandardScaler().fit(x_valid)
             logger.info(f"Before: mean={x_valid.mean()}, std={x_valid.std()}, max={x_valid.max()}, min={x_valid.min()}")
-            logger.info(
-                f"\nmean={x_valid.mean(axis=0)}, \nstd={x_valid.std(axis=0)}, \nmax={x_valid.max(axis=0)}, \nmin={x_valid.min(axis=0)}")
             x_valid = scaler.transform(x_valid)
             logger.info(f"After: mean={x_valid.mean()}, std={x_valid.std()}, max={x_valid.max()}, min={x_valid.min()}")
-            logger.info(
-                f"\nmean={x_valid.mean(axis=0)}, \nstd={x_valid.std(axis=0)}, \nmax={x_valid.max(axis=0)}, \nmin={x_valid.min(axis=0)}")
         logger.info('ok')
 
         return df, df_valid, x_valid, y_valid, features_list, val_list, scaler, meta, n_feature, feature_names
@@ -249,6 +245,7 @@ def linear_interpolation(arr, missing_val=0):
             arr[i, mask] = f(x[mask])
         elif mask.sum() == mask.shape[0] - 1:
             arr[i, :] = y[~mask]
+        arr[i, arr[i] < 0] = 0
     return arr
 
 
