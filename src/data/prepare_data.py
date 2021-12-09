@@ -9,7 +9,8 @@ import rasterio
 from rasterio.windows import Window
 from src.data.feature_engineering import add_bands, get_raw_every_n_weeks, get_statistics, get_difference
 from src.evaluation.visualize import plot_timestamps, plot_profile
-from src.utils.util import count_classes, load_shp_to_array, multipolygons_to_polygons, prepare_meta_window_descriptions
+from src.utils.util import count_classes, load_shp_to_array, multipolygons_to_polygons, \
+    prepare_meta_window_descriptions, prepare_meta_descriptions
 from src.utils.stack import stack_timestamps
 from scipy import interpolate
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -78,6 +79,8 @@ def prepare_data(logger, dataset, feature_dir, label_path, task, window=None,
     logger.info(f'# Stack timestamps {way}')
     if not isinstance(window, Window):
         meta, window, descriptions = prepare_meta_window_descriptions(feature_dir, label_path)
+    else:
+        meta, descriptions = prepare_meta_descriptions(feature_dir, window)
     read_as = 'as_raw' if 'as' not in scaling else scaling
     bands_array, meta, timestamps_raw, timestamps_weekly_ref = \
         stack_timestamps(logger, feature_dir, meta, descriptions, window, read_as=read_as,
@@ -441,6 +444,7 @@ def get_valid_crop_x_y(logger, df, n_feature, dataset):
 
 def clean_train_shapefiles(save_to_path='../data/train_labels/train_labels.shp'):
     # read all the shape files
+    print(os.path.abspath(os.getcwd()))
     old_apples_shp = gpd.read_file('../data/apples/survey20210716_polygons20210819_corrected20210831.shp')
     new_apples_shp = gpd.read_file('../data/apples/survey20210825_polygons20210901_revised20210929.shp')
     non_crops_shp = gpd.read_file('../data/non_crops/non_crops.shp')

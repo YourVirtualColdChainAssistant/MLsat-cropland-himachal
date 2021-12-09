@@ -27,10 +27,11 @@ def cropland_predict(args):
     test_far_dir = args.img_dir + '43RGQ/raster/' if not testing else args.img_dir + '43RGQ/raster_sample/'
     predict_dir = args.img_dir + args.tile_id + '/raster/' if not testing else args.img_dir + args.tile_id + '/raster_sample/'
 
+    # scaler
     if 'as' not in args.scaling:
         _, _, _, _, _, _, scaler, _, _, _ = \
-            prepare_data(logger=logger, dataset='train_val', feature_dir=train_val_dir, task='cropland', window=None,
-                         label_path='../data/train_labels/train_labels.shp',
+            prepare_data(logger=logger, dataset='train_val', feature_dir=train_val_dir, task='cropland',
+                         window=None, label_path='../data/train_labels/train_labels.shp',
                          feature_engineering=args.feature_engineering, scaling=args.scaling, smooth=args.smooth,
                          fill_missing=args.fill_missing, check_missing=False,
                          vis_stack=False, vis_profile=False)
@@ -81,25 +82,28 @@ def cropland_predict(args):
         patches_list = [f for f in glob.glob(file_path + '*.tiff')]
         merge(patches_list, dst_path=file_path + args.tile_id + '.tiff')
     else:
-        # test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir, 'shimla': test_far_dir}
-        test_dir_dict = {'shimla': test_far_dir}
+        test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir, 'shimla': test_far_dir}
+        # test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir}
         clean_test_shapefiles()
-        for district in test_dir_dict.keys():
-            logger.info(f'### Test on {district}')
-            test_dir = test_dir_dict[district]
-            label_path = f'../data/test_labels_{district}/test_labels_{district}.shp'
-            # prepare data
-            _, df_test, x_test, y_test, _, _, _, meta, n_feature, feature_names = \
-                prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
-                             label_path=label_path, window=None, task='cropland',
-                             feature_engineering=args.feature_engineering, scaling=args.scaling, scaler=scaler,
-                             fill_missing=args.fill_missing, check_missing=True, smooth=args.smooth,
-                             vis_stack=args.vis_stack, vis_profile=args.vis_profile)
-            # test
-            model = CroplandModel(logger, log_time, args.pretrained.split('_')[-1],
-                                  args.random_state, pretrained_name=args.pretrained)
-            model.test(x_test, y_test, meta, index=df_test.index, region_shp_path=label_path,
-                       feature_names=None, pred_name=f'{args.pretrained}_{district}')
+
+        pretrained = [args.pretrained] if isinstance(args.pretrained, str) else args.pretrained
+        for p in pretrained:
+            logger.info(f'### Use pretrained {p}')
+            for district in test_dir_dict.keys():
+                logger.info(f'### Test on {district}')
+                test_dir = test_dir_dict[district]
+                label_path = f'../data/test_labels_{district}/test_labels_{district}.shp'
+                # prepare data
+                _, df_test, x_test, y_test, _, _, _, meta, n_feature, feature_names = \
+                    prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
+                                 label_path=label_path, window=None, task='cropland',
+                                 feature_engineering=args.feature_engineering, scaling=args.scaling, scaler=scaler,
+                                 fill_missing=args.fill_missing, check_missing=True, smooth=args.smooth,
+                                 vis_stack=args.vis_stack, vis_profile=args.vis_profile)
+                # test
+                model = CroplandModel(logger, log_time, p.split('_')[-1], args.random_state, pretrained_name=p)
+                model.test(x_test, y_test, meta, index=df_test.index, region_shp_path=label_path,
+                           feature_names=None, pred_name=f'{p}_{district}')
 
 
 if __name__ == '__main__':
@@ -109,17 +113,17 @@ if __name__ == '__main__':
                         help='Base directory to all the images.')
     parser.add_argument('--tile_id', type=str, default='43RGQ')
     parser.add_argument('--test_regions', type=bool, default=True)
-    parser.add_argument('--pretrained', default='1201-204953_rfc',
+    parser.add_argument('--pretrained', default=['1206-093231_svc', '1206-093231_mlp'],
                         help='Filename of the best pretrained models.')
     parser.add_argument('--random_state', type=int, default=24)
 
     parser.add_argument('--vis_stack', type=bool, default=False)
-    parser.add_argument('--vis_profile', type=bool, default=True)
+    parser.add_argument('--vis_profile', type=bool, default=False)
     parser.add_argument('--feature_engineering', type=bool, default=True)
     parser.add_argument('--smooth', type=bool, default=False)
-    parser.add_argument('--scaling', type=str, default='as_TOA',
+    parser.add_argument('--scaling', type=str, default='standardize',
                         choices=['as_float', 'as_TOA', 'standardize', 'normalize'])
-    parser.add_argument('--fill_missing', type=str, default='linear', choices=[None, 'forward', 'linear'])
+    parser.add_argument('--fill_missing', type=str, default='forward', choices=[None, 'forward', 'linear'])
 
     args = parser.parse_args()
 

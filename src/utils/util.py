@@ -21,7 +21,7 @@ def load_geotiff(path, window=None, read_as='as_raw'):
             band = [skimage.img_as_float(f.read(i + 1, window=window)) for i in range(f.count)]
         elif read_as == 'as_TOA':
             band = [f.read(i + 1, window=window) / 10000 for i in range(f.count)]
-        else:  # normal read
+        else:  # normal read as integer
             band = [f.read(i + 1, window=window) for i in range(f.count)]
         meta = f.meta
         if window is not None:
@@ -163,6 +163,15 @@ def prepare_meta_window_descriptions(geotiff_dir, label_path):
 
     _, meta = load_geotiff(img_path, window, read_as='as_raw')
     return meta, window, descriptions
+
+
+def prepare_meta_descriptions(geotiff_dir, window):
+    img_path = geotiff_dir + os.listdir(geotiff_dir)[0]
+    img = rasterio.open(img_path)
+    transform, dst_crs, descriptions = img.transform, img.crs, img.descriptions
+
+    _, meta = load_geotiff(img_path, window, read_as='as_raw')
+    return meta, descriptions
 
 
 def get_window(transform, bounds):

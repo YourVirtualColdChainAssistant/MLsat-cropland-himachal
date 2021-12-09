@@ -1,14 +1,18 @@
-==  (train)
-   (test)  [svc]  [mlp]
-	* scaling=as_float, linear filling, ...
+== cropland_1208-100402 (train)
+   (test) cropland_1208-180911_predict [svc, mlp]
+	* scaling=normalize, forward filling, engineer features, all three models
 
 == cropland_1206-093231 (train)
-   (test)  [svc]  [mlp]
+   (test) cropland_1209-105605_predict [svc, mlp]
 	* scaling=standardize, forward filling, engineer features, all three models
 
 == cropland_1205-122225 (train)
    (test) cropland_1205-231705_predict [svc] cropland_1205-162348_predict [rfc] cropland_1205-205745_predict [mlp]
 	* scaling=TOA, forward filling, engineer features, all three models  
+
+== cropland_1207-181913 (train)
+   (test) cropland_1208-132301_predict [svc, mlp]
+	* scaling=float, forward filling, engineer features, all three models
 
 == cropland_1202-142248 (train)
    (test) cropland_1203-231430_predict [svc],  cropland_1204-101242_predict [mlp]
@@ -19,8 +23,12 @@
 	* scaling=stanardize, linear filling, engineer features, all three models 
 
 == cropland_1201-204953 (train)
-   (test) cropland_1202-223708_predict [svc], cropland_1203-094142_predict [mlp], cropland_1203-094703_predict [rfc]
+   (test) cropland_1202-223708_predict [svc], cropland_1203-094142_predict [mlp], cropland_1203-094703_predict / cropland_1206-132856_predict [rfc]
 	* scaling=TOA, linear filling, engineer features, all three models 
+
+== cropland_1206-215716 (train)
+   (test) cropland_1207-132147_predict [svc] cropland_1207-142413_predict [mlp]
+	* scaling=as_float, linear filling, ...
 
 == cropland_1124-222030_predict
 	* predict tile 43RGQ using "1119-224829_svc"

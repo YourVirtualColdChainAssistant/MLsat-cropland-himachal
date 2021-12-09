@@ -1,8 +1,17 @@
+import sys
+# sys.path.append("/home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/ML4Satellite")
+# sys.path.append("/home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/ML4Satellite/")
+# sys.path.append("/home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/ML4Satellite/src")
+# sys.path.append("/home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/ML4Satellite/src/")
+# sys.path.append("..")
+import os
 import argparse
 import datetime
 # import skgstat as skg
 import numpy as np
 import geopandas as gpd
+print(os.path.abspath(os.getcwd()))
+print(os.listdir())
 from src.data.prepare_data import prepare_data, construct_grid_to_fold, clean_train_shapefiles
 from src.models.cropland import CroplandModel
 from src.utils.logger import get_log_dir, get_logger
@@ -11,7 +20,8 @@ from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 
 def cropland_classification(args):
-    testing = False
+    testing = True
+    print(os.path.abspath(os.getcwd()))
 
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
@@ -73,6 +83,7 @@ def cropland_classification(args):
         visualize_cv_polygons(scv, coords_train_val, meta, cv_name + '_mask.tiff')
         logger.info(f'Saved {cv_name}_mask.tiff')
 
+    # TODO: add NoData mask when predicting for pixels with only missing data
     # models
     best_params = {
         'svc': {'C': 0.5, 'gamma': 'scale', 'kernel': 'poly', 'random_state': args.random_state},
@@ -126,9 +137,9 @@ if __name__ == '__main__':
     parser.add_argument('--vis_profile', type=bool, default=True)
     parser.add_argument('--feature_engineering', type=bool, default=True)
     parser.add_argument('--smooth', type=bool, default=False)
-    parser.add_argument('--scaling', type=str, default='as_float',
+    parser.add_argument('--scaling', type=str, default='normalize',
                         choices=['as_float', 'as_TOA', 'standardize', 'normalize'])
-    parser.add_argument('--fill_missing', type=str, default='linear', choices=[None, 'forward', 'linear'])
+    parser.add_argument('--fill_missing', type=str, default='forward', choices=[None, 'forward', 'linear'])
     parser.add_argument('--check_missing', type=bool, default=False)
     parser.add_argument('--check_autocorrelation', type=bool, default=False)
 

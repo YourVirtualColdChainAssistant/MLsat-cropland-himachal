@@ -5,7 +5,7 @@ from sentinelsat import SentinelAPI
 
 
 def download(args):
-    for m in range(4, 5):
+    for m in range(4, 13):
         date_range = get_month_first_last_date(m)
         download_date(args.user, args.password, args.img_dir, args.tile_id, date_range)
     print('Downloaded all the required data!')
@@ -18,7 +18,7 @@ def download_date(user, pwd, img_dir, tile_id, date_range):
     # raw directory
     raw_dir = img_dir + 'raw/'
     if not os.path.exists(raw_dir):
-        os.mkdir(raw_dir)
+        os.makedirs(raw_dir)
 
     # connect to API
     api = SentinelAPI(user, pwd)
@@ -34,10 +34,12 @@ def download_date(user, pwd, img_dir, tile_id, date_range):
                              processinglevel='Level-2A',
                              raw=f'tileid:{tile_id}')
     if len(products_L2A) == len(products_L1C):
+        level = 'L2A'
         products = products_L2A
     else:
+        level = 'L1C'
         products = products_L1C
-    print(f'Found {len(products)} products in {date_range}')
+    print(f'Found {len(products)} {level} products in {date_range}')
 
     # check the number of online and offline products
     off_nb = 0
@@ -69,7 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('--password', type=str, default='empa.401')
     parser.add_argument('--img_dir', type=str,
                         default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/')
-    parser.add_argument('--tile_id', type=str, default='43RGQ')
+    parser.add_argument('--tile_id', type=str, default='43RFQ')
     args = parser.parse_args()
 
     download(args)
