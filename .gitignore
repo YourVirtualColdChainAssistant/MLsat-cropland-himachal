@@ -1,4 +1,5 @@
-models/*.pkl
+models/
+tiles/
 *.pkl
 .idea
 *.tif
