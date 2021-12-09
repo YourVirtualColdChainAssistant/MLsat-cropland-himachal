@@ -1,3 +1,4 @@
+models/*.pkl
 *.pkl
 .idea
 *.tif

@@ -1,2 +1,0 @@
-mean_fit_time,std_fit_time,mean_score_time,std_score_time,params,mean_test_score,std_test_score,rank_test_score
-745.4690980911255,527.8494537602527,230.2486343383789,128.3325310577739,"{'C': 1, 'gamma': 'scale', 'kernel': 'rbf'}",0.6064209745634273,0.10332834383533444,1
