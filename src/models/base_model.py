@@ -58,7 +58,7 @@ class BaseModel(object):
         self._logger.info(f'  Fitted accuracy: {self.model.score(x_train_val, y_train_val):.4f}')
 
         # save model
-        model_name = f'../models/{self.to_name}.pkl'
+        model_name = f'./models/{self.to_name}.pkl'
         pickle.dump(self.model, open(model_name, 'wb'))
         self._logger.info(f'  Saved the best {self.model_name.upper()} to {model_name}')
 
@@ -74,7 +74,7 @@ class BaseModel(object):
         self._logger.info('  ok')
 
     def _save_predictions(self, meta, y_preds):
-        pred_path = f'../preds/{self.to_name}.tiff'
+        pred_path = f'./preds/{self.to_name}.tiff'
         save_predictions_geotiff(meta, y_preds, pred_path)
         self._logger.info(f'Saved {self.model_name.upper()} predictions to {pred_path}')
 

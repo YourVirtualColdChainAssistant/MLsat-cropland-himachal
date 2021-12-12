@@ -18,7 +18,7 @@ def cropland_predict(args):
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
     log_filename = f'cropland_{log_time}_predict.log' if not testing else f'cropland_testing_{log_time}_predict.log'
-    logger = get_logger(get_log_dir(), __name__, log_filename, level='INFO')
+    logger = get_logger(get_log_dir('./logs/'), __name__, log_filename, level='INFO')
     logger.info(args)
 
     logger.info('#### Test Cropland Model')
@@ -31,7 +31,7 @@ def cropland_predict(args):
     if 'as' not in args.scaling:
         _, _, _, _, _, _, scaler, _, _, _ = \
             prepare_data(logger=logger, dataset='train_val', feature_dir=train_val_dir, task='cropland',
-                         window=None, label_path='../data/train_labels/train_labels.shp',
+                         window=None, label_path='./data/train_labels/train_labels.shp',
                          feature_engineering=args.feature_engineering, scaling=args.scaling, smooth=args.smooth,
                          fill_missing=args.fill_missing, check_missing=False,
                          vis_stack=False, vis_profile=False)
@@ -41,14 +41,14 @@ def cropland_predict(args):
     if not args.test_regions:
         # load pretrained model
         logger.info("Loading the best pretrained model...")
-        model = pickle.load(open(f'../models/{args.pretrained}.pkl', 'rb'))
+        model = pickle.load(open(f'./models/{args.pretrained}.pkl', 'rb'))
 
         # read and predict in patches
         full_len, n_patch = 10800, 10
         patch_len = int(full_len / n_patch)
 
         # check path existence
-        file_path = f'../preds/tiles/{args.tile_id}/'
+        file_path = f'./preds/tiles/{args.tile_id}/'
         if not os.path.isdir(file_path):
             os.makedirs(file_path)
 
@@ -83,7 +83,7 @@ def cropland_predict(args):
         merge(patches_list, dst_path=file_path + args.tile_id + '.tiff')
     else:
         test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir, 'shimla': test_far_dir}
-        # test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir}
+        # test_dir_dict = {'mandi': test_far_dir}
         clean_test_shapefiles()
 
         pretrained = [args.pretrained] if isinstance(args.pretrained, str) else args.pretrained
@@ -92,7 +92,7 @@ def cropland_predict(args):
             for district in test_dir_dict.keys():
                 logger.info(f'### Test on {district}')
                 test_dir = test_dir_dict[district]
-                label_path = f'../data/test_labels_{district}/test_labels_{district}.shp'
+                label_path = f'./data/test_labels_{district}/test_labels_{district}.shp'
                 # prepare data
                 _, df_test, x_test, y_test, _, _, _, meta, n_feature, feature_names = \
                     prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
@@ -113,7 +113,7 @@ if __name__ == '__main__':
                         help='Base directory to all the images.')
     parser.add_argument('--tile_id', type=str, default='43RGQ')
     parser.add_argument('--test_regions', type=bool, default=True)
-    parser.add_argument('--pretrained', default=['1206-093231_svc', '1206-093231_mlp'],
+    parser.add_argument('--pretrained', default=['1212-010141_svc', '1212-010141_rfc', '1212-010141_mlp'],
                         help='Filename of the best pretrained models.')
     parser.add_argument('--random_state', type=int, default=24)
 
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     parser.add_argument('--vis_profile', type=bool, default=False)
     parser.add_argument('--feature_engineering', type=bool, default=True)
     parser.add_argument('--smooth', type=bool, default=False)
-    parser.add_argument('--scaling', type=str, default='standardize',
+    parser.add_argument('--scaling', type=str, default='normalize',
                         choices=['as_float', 'as_TOA', 'standardize', 'normalize'])
     parser.add_argument('--fill_missing', type=str, default='forward', choices=[None, 'forward', 'linear'])
 

@@ -21,7 +21,7 @@ class CroplandModel(BaseModel):
             self._log_time = pretrained_name.split('_')[0]
             if pretrained_name.split('_')[1] != self.model_name:
                 raise ValueError('Initialized model is not the same as the pretrained model.')
-            self.load_pretrained_model(f'../models/{pretrained_name}.pkl')
+            self.load_pretrained_model(f'./models/{pretrained_name}.pkl')
 
     def find_best_hyperparams(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3, n_iter=10,
                               testing=False):
@@ -37,18 +37,18 @@ class CroplandModel(BaseModel):
 
     def evaluate_by_feature_importance(self, x_test, y_test, feature_names):
         self._logger.info('Evaluating by feature importance...')
-        model_PI = f'../preds/{self.to_name}_PI.csv'
+        model_PI = f'./preds/{self.to_name}_PI.csv'
         permutation_importance_table(self.model, x_test, y_test, feature_names, f'{model_PI}')
         self._logger.info(f'  Saved permutation importance to {model_PI}')
         if self.model_name == 'rfc':
-            model_II = f'../preds/{self.to_name}_II.csv'
+            model_II = f'./preds/{self.to_name}_II.csv'
             impurity_importance_table(feature_names, self.model.feature_importances_, f'{model_II}')
             self._logger.info(f'  Saved impurity importance to {model_II}')
 
     def evaluate_by_open_datasets(self, region_shp_path, label_only=True):
         self._logger.info('Evaluating by open datasets...')
         ancilliary_path = 'K:/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/'
-        pred_path = f'../preds/{self.to_name}.tiff'
+        pred_path = f'./preds/{self.to_name}.tiff'
         district = region_shp_path.split('/')[-2].split('_')[-1]
 
         gfsad_args = {
@@ -65,7 +65,7 @@ class CroplandModel(BaseModel):
 
         for ds in [gfsad_args, copernicus_args]:
             dataset, raw_path, evaluate_func = ds['dataset'], ds['raw_path'], ds['evaluate_func']
-            out_path = f'../data/open_datasets/{dataset}_{district}.tiff'
+            out_path = f'./data/open_datasets/{dataset}_{district}.tiff'
             self._logger.info(f'Comparing {dataset.upper()} dataset with predictions...')
             prepare_open_datasets(raw_path, out_path, pred_path, region_shp_path, label_only)
             evaluate_func(pred_path, out_path, self._logger)

@@ -1,17 +1,12 @@
 import sys
-# sys.path.append("/home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/ML4Satellite")
-# sys.path.append("/home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/ML4Satellite/")
-# sys.path.append("/home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/ML4Satellite/src")
-# sys.path.append("/home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/ML4Satellite/src/")
-# sys.path.append("..")
 import os
 import argparse
 import datetime
 # import skgstat as skg
 import numpy as np
 import geopandas as gpd
-print(os.path.abspath(os.getcwd()))
-print(os.listdir())
+
+print('initial: ', os.path.abspath(os.getcwd()))
 from src.data.prepare_data import prepare_data, construct_grid_to_fold, clean_train_shapefiles
 from src.models.cropland import CroplandModel
 from src.utils.logger import get_log_dir, get_logger
@@ -21,30 +16,32 @@ from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 def cropland_classification(args):
     testing = True
-    print(os.path.abspath(os.getcwd()))
 
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
     log_filename = f'cropland_{log_time}.log' if not testing else f'cropland_testing_{log_time}.log'
-    logger = get_logger(get_log_dir(), __name__, log_filename, level='INFO')
+    logger = get_logger(get_log_dir('./logs/'), __name__, log_filename, level='INFO')
     logger.info(args)
 
     logger.info('#### Cropland Classification')
     clean_train_shapefiles()
-    feature_dir = args.img_dir + args.tile_id + '/raster/' if not testing else args.img_dir + args.tile_id + '/raster_sample/'
+    feature_dir = args.img_dir + '/43SFR/raster/' if not testing else args.img_dir + '/43SFR/raster_sample/'
+
+    print('prepare data:', os.path.abspath(os.getcwd()))
 
     # prepare train and validation dataset
     df_tv, df_train_val, x_train_val, y_train_val, polygons, _, scaler, meta, n_feature, feature_names = \
         prepare_data(logger=logger, dataset='train_val', feature_dir=feature_dir, task='cropland', window=None,
-                     label_path='../data/train_labels/train_labels.shp',
+                     label_path='./data/train_labels/train_labels.shp',
                      feature_engineering=args.feature_engineering, scaling=args.scaling, smooth=args.smooth,
                      fill_missing=args.fill_missing, check_missing=args.check_missing,
                      vis_stack=args.vis_stack, vis_profile=args.vis_profile)
     coords_train_val = gpd.GeoDataFrame({'geometry': df_train_val.coords.values})
-    x = df_tv.iloc[:, :n_feature].values
-    if args.scaling == 'standardize' or args.scaling == 'normalize':
-        x = scaler.transform(x)
-        logger.info('Transformed all x')
+    if args.predict_train:
+        x = df_tv.iloc[:, :n_feature].values
+        if args.scaling == 'standardize' or args.scaling == 'normalize':
+            x = scaler.transform(x)
+            logger.info('Transformed all x')
 
     # if args.check_autocorrelation:
     #     # TODO: draw more pairs below 5km, see the values of auto-correlation
@@ -71,26 +68,26 @@ def cropland_classification(args):
         grid = construct_grid_to_fold(polygons, tiles_x=args.tiles_x, tiles_y=args.tiles_y, shape=args.shape,
                                       data=x_train_val, n_fold=args.n_fold, random_state=args.random_state)
         scv = ModifiedBlockCV(custom_polygons=grid, buffer_radius=args.buffer_radius)
-        # visualize valid block
-        cv_name = f'../figs/cv_{args.tiles_x}x{args.tiles_y}{args.shape}_f{args.n_fold}_s{args.random_state}'
-        visualize_cv_fold(grid, meta, cv_name + '.tiff')
-        logger.info(f'Saved {cv_name}.tiff')
-        visualize_cv_polygons(scv, coords_train_val, meta, cv_name + '_mask.tiff')
-        logger.info(f'Saved {cv_name}_mask.tiff')
+        # # visualize valid block
+        # cv_name = f'../figs/cv_{args.tiles_x}x{args.tiles_y}{args.shape}_f{args.n_fold}_s{args.random_state}'
+        # visualize_cv_fold(grid, meta, cv_name + '.tiff')
+        # logger.info(f'Saved {cv_name}.tiff')
+        # visualize_cv_polygons(scv, coords_train_val, meta, cv_name + '_mask.tiff')
+        # logger.info(f'Saved {cv_name}_mask.tiff')
     elif args.cv_type == 'spatial':
         scv = ModifiedSKCV(n_splits=args.n_fold, buffer_radius=args.buffer_radius, random_state=args.random_state)
-        cv_name = f'../figs/cv_{args.cv_type}_f{args.n_fold}_s{args.random_state}'
-        visualize_cv_polygons(scv, coords_train_val, meta, cv_name + '_mask.tiff')
-        logger.info(f'Saved {cv_name}_mask.tiff')
+        # cv_name = f'../figs/cv_{args.cv_type}_f{args.n_fold}_s{args.random_state}'
+        # visualize_cv_polygons(scv, coords_train_val, meta, cv_name + '_mask.tiff')
+        # logger.info(f'Saved {cv_name}_mask.tiff')
 
     # TODO: add NoData mask when predicting for pixels with only missing data
     # models
     best_params = {
-        'svc': {'C': 0.5, 'gamma': 'scale', 'kernel': 'poly', 'random_state': args.random_state},
-        'rfc': {'criterion': 'entropy', 'max_depth': 15, 'max_samples': 0.8, 'n_estimators': 500,
+        # 'svc': {'C': 10, 'gamma': 'auto', 'kernel': 'poly', 'random_state': args.random_state},
+        'rfc': {'criterion': 'entropy', 'max_depth': 10, 'max_samples': 0.8, 'n_estimators': 100,
                 'random_state': args.random_state},
-        'mlp': {'hidden_layer_sizes': (100,), 'alpha': 0.0001, 'max_iter': 200, 'activation': 'relu',
-                'early_stopping': True, 'random_state': args.random_state}
+        # 'mlp': {'activation': 'relu', 'alpha': 0.0001, 'early_stopping': True, 'hidden_layer_sizes': (300,),
+        # 'max_iter': 200, 'random_state': args.random_state}
     }
     for m in best_params.keys():
         model = CroplandModel(logger, log_time, m, args.random_state)
@@ -105,9 +102,10 @@ def cropland_classification(args):
             model.fit_best(x_train_val, y_train_val)
         # predict and evaluation
         model.test(x_train_val, y_train_val, meta, index=df_train_val.index,
-                   region_shp_path='../data/train_labels/train_labels.shp',
+                   region_shp_path='./data/train_labels/train_labels.shp',
                    feature_names=None, pred_name=f'{log_time}_{m}_train')
-        model.predict(x, meta, region_shp_path='../data/train_region/train_region.shp')
+        if args.predict_train:
+            model.predict(x, meta, region_shp_path='./data/train_region/train_region.shp')
 
 
 if __name__ == '__main__':
@@ -116,10 +114,9 @@ if __name__ == '__main__':
     parser.add_argument('--img_dir', type=str,
                         default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/',
                         help='Base directory to all the images.')
-    parser.add_argument('--tile_id', type=str, default='43SFR')
 
     # cross validation
-    parser.add_argument('--cv_type', type=str, default=None, choices=[None, 'random', 'block', 'spatial'],
+    parser.add_argument('--cv_type', default=None, choices=[None, 'random', 'block', 'spatial'],
                         help='Method of cross validation.')
     parser.add_argument('--tiles_x', type=int, default=4)
     parser.add_argument('--tiles_y', type=int, default=4)
@@ -134,14 +131,16 @@ if __name__ == '__main__':
 
     # prepare data
     parser.add_argument('--vis_stack', type=bool, default=False)
-    parser.add_argument('--vis_profile', type=bool, default=True)
+    parser.add_argument('--vis_profile', type=bool, default=False)
     parser.add_argument('--feature_engineering', type=bool, default=True)
     parser.add_argument('--smooth', type=bool, default=False)
-    parser.add_argument('--scaling', type=str, default='normalize',
+    parser.add_argument('--scaling', type=str, default='as_float',
                         choices=['as_float', 'as_TOA', 'standardize', 'normalize'])
-    parser.add_argument('--fill_missing', type=str, default='forward', choices=[None, 'forward', 'linear'])
+    parser.add_argument('--fill_missing', default='forward', choices=[None, 'forward', 'linear'])
     parser.add_argument('--check_missing', type=bool, default=False)
     parser.add_argument('--check_autocorrelation', type=bool, default=False)
+
+    parser.add_argument('--predict_train', type=bool, default=False)
 
     args = parser.parse_args()
 

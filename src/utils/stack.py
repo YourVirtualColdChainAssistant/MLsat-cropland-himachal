@@ -58,7 +58,7 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
                 # mask cloud
                 cloudy_mask = band[idx_cloud] != 0
                 nodata_mask = band[idx_other[0]] == 0
-                nodata_mask_list.append(nodata_mask)
+                # nodata_mask_list.append(nodata_mask)
                 band = np.array(band)[idx_other]
                 # fill pixels with clouds as 0
                 for j in range(len(band)):
@@ -74,20 +74,20 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
             # merge images of a period by taking max
             band_list = np.stack(band_list, axis=2).max(axis=2)
             # check the real number of no data, influenced by merging several images
-            nodata_mask = nodata_mask_list[0]
-            for m in nodata_mask_list:
-                nodata_mask = nodata_mask & m
-            zero_mask = band_list[:, 0] == 0
-            n_nodata = nodata_mask.sum()
-            n_zero = zero_mask.sum()
-            zero_mask_list.append(zero_mask)
-            p_cloud_list.append(round((n_zero - n_nodata) / n_total, 4))
-            p_fill_list.append(round(n_zero / n_total, 4))
+            # nodata_mask = nodata_mask_list[0]
+            # for m in nodata_mask_list:
+            #     nodata_mask = nodata_mask & m
+            # zero_mask = band_list[:, 0] == 0
+            # n_nodata = nodata_mask.sum()
+            # n_zero = zero_mask.sum()
+            # zero_mask_list.append(zero_mask)
+            # p_cloud_list.append(round((n_zero - n_nodata) / n_total, 4))
+            # p_fill_list.append(round(n_zero / n_total, 4))
         else:  # i == 1:
             band_list = np.zeros((meta['height'] * meta['width'], meta['count'] - 1))
-            zero_mask_list.append(np.ones((meta['height'] * meta['width'])))
-            p_cloud_list.append(0)
-            p_fill_list.append(1)
+            # zero_mask_list.append(np.ones((meta['height'] * meta['width'])))
+            # p_cloud_list.append(0)
+            # p_fill_list.append(1)
 
         # print
         if len(ids) != 0:
@@ -103,14 +103,14 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
         # TODO: cloud and filling ratio is not correctly calculated (include pixels not test)
         bands_list.append(band_list)
 
-    print('Before checking missing:', datetime.datetime.now())
-    if check_missing:
-        check_missing_condition(zero_mask_list, timestamps_ref, n_total)
-    print('After checking missing:', datetime.datetime.now())
+    # print('Before checking missing:', datetime.datetime.now())
+    # if check_missing:
+    #     check_missing_condition(zero_mask_list, timestamps_ref, n_total)
+    # print('After checking missing:', datetime.datetime.now())
     # stack finally
     meta.update(count=meta['count'] - 1)
-    logger.info(f'  avg. cloud coverage = {np.array(p_cloud_list).mean():.4f}')
-    logger.info(f'  avg. filling ratio = {np.array(p_fill_list).mean():.4f}')
+    # logger.info(f'  avg. cloud coverage = {np.array(p_cloud_list).mean():.4f}')
+    # logger.info(f'  avg. filling ratio = {np.array(p_fill_list).mean():.4f}')
 
     bands_array = np.stack(bands_list, axis=2).reshape(meta['height'], meta['width'], meta['count'], -1)
 

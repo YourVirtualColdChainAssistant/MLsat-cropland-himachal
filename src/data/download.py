@@ -5,7 +5,7 @@ from sentinelsat import SentinelAPI
 
 
 def download(args):
-    for m in range(4, 13):
+    for m in range(1, 13):
         date_range = get_month_first_last_date(m)
         download_date(args.user, args.password, args.img_dir, args.tile_id, date_range)
     print('Downloaded all the required data!')
@@ -71,7 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('--password', type=str, default='empa.401')
     parser.add_argument('--img_dir', type=str,
                         default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/')
-    parser.add_argument('--tile_id', type=str, default='43RFQ')
+    parser.add_argument('--tile_id', type=str, default='44SKA')
     args = parser.parse_args()
 
     download(args)
