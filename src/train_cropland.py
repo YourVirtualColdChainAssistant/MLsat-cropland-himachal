@@ -7,7 +7,7 @@ import numpy as np
 import geopandas as gpd
 
 print('initial: ', os.path.abspath(os.getcwd()))
-from src.data.prepare_data import prepare_data, construct_grid_to_fold, clean_train_shapefiles
+from src.data.prepare import prepare_data, construct_grid_to_fold, clean_train_shapefiles
 from src.models.cropland import CroplandModel
 from src.utils.logger import get_log_dir, get_logger
 from src.utils.scv import ModifiedBlockCV, ModifiedSKCV
@@ -15,7 +15,11 @@ from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 
 def cropland_classification(args):
-    testing = True
+    testing = False
+    if args.work_station:
+        args.img_dir = '/mnt/N/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/'
+    else:
+        args.img_dir = 'N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/'
 
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
@@ -33,7 +37,8 @@ def cropland_classification(args):
     df_tv, df_train_val, x_train_val, y_train_val, polygons, _, scaler, meta, n_feature, feature_names = \
         prepare_data(logger=logger, dataset='train_val', feature_dir=feature_dir, task='cropland', window=None,
                      label_path='./data/train_labels/train_labels.shp',
-                     feature_engineering=args.feature_engineering, scaling=args.scaling, smooth=args.smooth,
+                     feature_engineer=args.feature_engineer, spatial_feature=args.spatial_feature,
+                     scaling=args.scaling, smooth=args.smooth,
                      fill_missing=args.fill_missing, check_missing=args.check_missing,
                      vis_stack=args.vis_stack, vis_profile=args.vis_profile)
     coords_train_val = gpd.GeoDataFrame({'geometry': df_train_val.coords.values})
@@ -52,10 +57,10 @@ def cropland_classification(args):
     #     # equal
     #     coords_xy = np.array([[coord.x, coord.y] for coord in df_train_val.coords.values])
     #     variogram_equal = skg.Variogram(coords_xy[sample_ids_equal], df_train_val.gt_cropland.values[sample_ids_equal])
-    #     variogram_equal.plot().savefig('../figs/semivariogram_equal.png', bbox_inches='tight')
+    #     variogram_equal.plot().savefig('./figs/semivariogram_equal.png', bbox_inches='tight')
     #     # near
     #     variogram_near = skg.Variogram(coords_xy[sample_ids_near], df_train_val.gt_cropland.values[sample_ids_near])
-    #     variogram_near.plot().savefig('../figs/semivariogram_near.png', bbox_inches='tight')
+    #     variogram_near.plot().savefig('./figs/semivariogram_near.png', bbox_inches='tight')
     #     logger.info('Saved semivariogram')
 
     # TODO: how to use semi-variogram or other statistics in practice
@@ -69,25 +74,25 @@ def cropland_classification(args):
                                       data=x_train_val, n_fold=args.n_fold, random_state=args.random_state)
         scv = ModifiedBlockCV(custom_polygons=grid, buffer_radius=args.buffer_radius)
         # # visualize valid block
-        # cv_name = f'../figs/cv_{args.tiles_x}x{args.tiles_y}{args.shape}_f{args.n_fold}_s{args.random_state}'
+        # cv_name = f'./figs/cv_{args.tiles_x}x{args.tiles_y}{args.shape}_f{args.n_fold}_s{args.random_state}'
         # visualize_cv_fold(grid, meta, cv_name + '.tiff')
         # logger.info(f'Saved {cv_name}.tiff')
         # visualize_cv_polygons(scv, coords_train_val, meta, cv_name + '_mask.tiff')
         # logger.info(f'Saved {cv_name}_mask.tiff')
     elif args.cv_type == 'spatial':
         scv = ModifiedSKCV(n_splits=args.n_fold, buffer_radius=args.buffer_radius, random_state=args.random_state)
-        # cv_name = f'../figs/cv_{args.cv_type}_f{args.n_fold}_s{args.random_state}'
+        # cv_name = f'./figs/cv_{args.cv_type}_f{args.n_fold}_s{args.random_state}'
         # visualize_cv_polygons(scv, coords_train_val, meta, cv_name + '_mask.tiff')
         # logger.info(f'Saved {cv_name}_mask.tiff')
 
     # TODO: add NoData mask when predicting for pixels with only missing data
     # models
     best_params = {
-        # 'svc': {'C': 10, 'gamma': 'auto', 'kernel': 'poly', 'random_state': args.random_state},
+        'svc': {'C': 10, 'gamma': 'auto', 'kernel': 'poly', 'random_state': args.random_state},
         'rfc': {'criterion': 'entropy', 'max_depth': 10, 'max_samples': 0.8, 'n_estimators': 100,
                 'random_state': args.random_state},
         # 'mlp': {'activation': 'relu', 'alpha': 0.0001, 'early_stopping': True, 'hidden_layer_sizes': (300,),
-        # 'max_iter': 200, 'random_state': args.random_state}
+        #         'max_iter': 200, 'random_state': args.random_state}
     }
     for m in best_params.keys():
         model = CroplandModel(logger, log_time, m, args.random_state)
@@ -103,20 +108,19 @@ def cropland_classification(args):
         # predict and evaluation
         model.test(x_train_val, y_train_val, meta, index=df_train_val.index,
                    region_shp_path='./data/train_labels/train_labels.shp',
-                   feature_names=None, pred_name=f'{log_time}_{m}_train')
+                   feature_names=None, pred_name=f'{log_time}_{m}_train', work_station=args.work_station)
         if args.predict_train:
-            model.predict(x, meta, region_shp_path='./data/train_region/train_region.shp')
+            model.predict(x, meta, region_shp_path='./data/train_region/train_region.shp',
+                          work_station=args.work_station)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # TODO: add a configuration file and save with the same file name
-    parser.add_argument('--img_dir', type=str,
-                        default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/',
-                        help='Base directory to all the images.')
+    parser.add_argument('--work_station', type=bool, default=False)
 
     # cross validation
-    parser.add_argument('--cv_type', default=None, choices=[None, 'random', 'block', 'spatial'],
+    parser.add_argument('--cv_type', default='block', choices=[None, 'random', 'block', 'spatial'],
                         help='Method of cross validation.')
     parser.add_argument('--tiles_x', type=int, default=4)
     parser.add_argument('--tiles_y', type=int, default=4)
@@ -132,11 +136,12 @@ if __name__ == '__main__':
     # prepare data
     parser.add_argument('--vis_stack', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)
-    parser.add_argument('--feature_engineering', type=bool, default=True)
+    parser.add_argument('--feature_engineer', type=bool, default=True, action='store_false')
+    parser.add_argument('--spatial_feature', type=bool, default=True, action='store_false')
     parser.add_argument('--smooth', type=bool, default=False)
-    parser.add_argument('--scaling', type=str, default='as_float',
-                        choices=['as_float', 'as_TOA', 'standardize', 'normalize'])
-    parser.add_argument('--fill_missing', default='forward', choices=[None, 'forward', 'linear'])
+    parser.add_argument('--scaling', type=str, default='as_reflectance',
+                        choices=['as_float', 'as_reflectance', 'standardize', 'normalize'])
+    parser.add_argument('--fill_missing', default='linear', choices=[None, 'forward', 'linear'])
     parser.add_argument('--check_missing', type=bool, default=False)
     parser.add_argument('--check_autocorrelation', type=bool, default=False)
 

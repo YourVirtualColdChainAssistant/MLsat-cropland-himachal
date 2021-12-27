@@ -40,7 +40,7 @@ def get_logger(log_dir, name, log_filename='info.log', level=logging.INFO):
     return logger
 
 
-def get_log_dir(log_dir='../logs/'):
+def get_log_dir(log_dir='./logs/'):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     return log_dir

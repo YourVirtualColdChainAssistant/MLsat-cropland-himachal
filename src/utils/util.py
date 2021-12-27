@@ -7,9 +7,10 @@ import geopandas as gpd
 import skimage
 import rasterio
 from rasterio.windows import Window
+from rasterio.enums import Resampling
 
 
-def load_geotiff(path, window=None, read_as='as_raw'):
+def load_geotiff(path, window=None, read_as='as_integer'):
     """ Load the geotiff as a list of numpy array.
         INPUT : path (str) -> the path to the geotiff
                 window (rasterio.windows.Window) -> the window to use when loading the image
@@ -19,7 +20,7 @@ def load_geotiff(path, window=None, read_as='as_raw'):
     with rasterio.open(path) as f:
         if read_as == 'as_float':
             band = [skimage.img_as_float(f.read(i + 1, window=window)) for i in range(f.count)]
-        elif read_as == 'as_TOA':
+        elif read_as == 'as_reflectance':
             band = [f.read(i + 1, window=window) / 10000 for i in range(f.count)]
         else:  # normal read as integer
             band = [f.read(i + 1, window=window) for i in range(f.count)]
@@ -190,3 +191,32 @@ def get_window(transform, bounds):
     row_min, col_min = rasterio.transform.rowcol(transform, minx, maxy)
     row_max, col_max = rasterio.transform.rowcol(transform, maxx, miny)
     return Window(col_min, row_min, col_max - col_min, row_max - row_min)
+
+
+def resample(in_file, h_target, w_target):
+    with rasterio.open(in_file) as dataset:
+        # resample data to target shape
+        data = dataset.read(
+            out_shape=(dataset.count, h_target, w_target),
+            resampling=Resampling.nearest
+        )
+
+        # scale image transform
+        transform = dataset.transform * dataset.transform.scale(
+            (dataset.width / w_target),
+            (dataset.height / h_target)
+        )
+
+        return data, transform
+
+
+def find_file(string, search_path):
+    result = []
+    # Wlaking top-down from the root
+    for root, dir_, files in os.walk(search_path):
+        for f in files:
+            if string in f:
+                filename = f
+                result.append(os.path.join(root, filename))
+                break
+    return result

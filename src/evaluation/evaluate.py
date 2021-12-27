@@ -73,8 +73,8 @@ def evaluate_by_gfsad(pred_path, dataset_path, logger=None):
 
     """
     # load data
-    band_pred, meta_pred = load_geotiff(pred_path, read_as='as_raw')
-    band_dataset, meta_dataset = load_geotiff(dataset_path, read_as='as_raw')
+    band_pred, meta_pred = load_geotiff(pred_path, read_as='as_integer')
+    band_dataset, meta_dataset = load_geotiff(dataset_path, read_as='as_integer')
     band_pred = band_pred[0]
     band_dataset = band_dataset[0]
 
@@ -110,8 +110,8 @@ def evaluate_by_copernicus(pred_path, dataset_path, logger=None):
 
     """
     # load data
-    band_pred, meta_pred = load_geotiff(pred_path, read_as='as_raw')
-    band_dataset, meta_dataset = load_geotiff(dataset_path, read_as='as_raw')
+    band_pred, meta_pred = load_geotiff(pred_path, read_as='as_integer')
+    band_dataset, meta_dataset = load_geotiff(dataset_path, read_as='as_integer')
     band_pred = band_pred[0]
     band_dataset = band_dataset[0]
 
@@ -140,7 +140,7 @@ def diff_two_predictions(pred_path_1, pred_path_2):
     # save name
     pred_name_1 = pred_path_1.split('/')[-1].split('.')[0]
     pred_name_2 = pred_path_2.split('/')[-1].split('.')[0]
-    output_path = f"../preds/diff_{pred_name_1}_{pred_name_2}.tiff"
+    output_path = f"./preds/diff_{pred_name_1}_{pred_name_2}.tiff"
     # save
     with rasterio.open(output_path, "w", **meta_pred_1) as dst:
         dst.write(band_diff)

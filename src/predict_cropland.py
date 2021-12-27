@@ -6,7 +6,7 @@ import numpy as np
 import glob
 from rasterio.windows import Window
 from rasterio.merge import merge
-from src.data.prepare_data import prepare_data, clean_test_shapefiles
+from src.data.prepare import prepare_data, clean_test_shapefiles
 from src.utils.logger import get_log_dir, get_logger
 from src.utils.util import save_predictions_geotiff
 from src.models.cropland import CroplandModel
@@ -14,6 +14,10 @@ from src.models.cropland import CroplandModel
 
 def cropland_predict(args):
     testing = False
+    if args.work_station:
+        args.img_dir = '/mnt/N/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/'
+    else:
+        args.img_dir = 'N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/'
 
     # logger
     log_time = datetime.datetime.now().strftime("%m%d-%H%M%S")
@@ -32,7 +36,7 @@ def cropland_predict(args):
         _, _, _, _, _, _, scaler, _, _, _ = \
             prepare_data(logger=logger, dataset='train_val', feature_dir=train_val_dir, task='cropland',
                          window=None, label_path='./data/train_labels/train_labels.shp',
-                         feature_engineering=args.feature_engineering, scaling=args.scaling, smooth=args.smooth,
+                         feature_engineer=args.feature_engineer, scaling=args.scaling, smooth=args.smooth,
                          fill_missing=args.fill_missing, check_missing=False,
                          vis_stack=False, vis_profile=False)
     else:
@@ -62,8 +66,9 @@ def cropland_predict(args):
                 # prepare data
                 df, x, meta, n_feature, feature_names = \
                     prepare_data(logger=logger, dataset='predict', feature_dir=predict_dir,
-                                 label_path=None, window=window, task='cropland', smooth=args.smooth,
-                                 feature_engineering=args.feature_engineering, scaling=args.scaling, scaler=scaler,
+                                 label_path=None, window=window, task='cropland',
+                                 feature_engineer=args.feature_engineer, spatial_feature=args.spatial_feature,
+                                 scaling=args.scaling, scaler=scaler, smooth=args.smooth,
                                  fill_missing=args.fill_missing, check_missing=True,
                                  vis_stack=args.vis_stack, vis_profile=args.vis_profile)
                 logger.info(f'df.shape {df.shape}, x.shape {x.shape}')
@@ -87,43 +92,43 @@ def cropland_predict(args):
         clean_test_shapefiles()
 
         pretrained = [args.pretrained] if isinstance(args.pretrained, str) else args.pretrained
-        for p in pretrained:
-            logger.info(f'### Use pretrained {p}')
-            for district in test_dir_dict.keys():
-                logger.info(f'### Test on {district}')
-                test_dir = test_dir_dict[district]
-                label_path = f'./data/test_labels_{district}/test_labels_{district}.shp'
-                # prepare data
-                _, df_test, x_test, y_test, _, _, _, meta, n_feature, feature_names = \
-                    prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
-                                 label_path=label_path, window=None, task='cropland',
-                                 feature_engineering=args.feature_engineering, scaling=args.scaling, scaler=scaler,
-                                 fill_missing=args.fill_missing, check_missing=True, smooth=args.smooth,
-                                 vis_stack=args.vis_stack, vis_profile=args.vis_profile)
-                # test
+        for district in test_dir_dict.keys():
+            logger.info(f'### Test on {district}')
+            test_dir = test_dir_dict[district]
+            label_path = f'./data/test_labels_{district}/test_labels_{district}.shp'
+            # prepare data
+            _, df_test, x_test, y_test, _, _, _, meta, n_feature, feature_names = \
+                prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
+                             label_path=label_path, window=None, task='cropland',
+                             feature_engineer=args.feature_engineer, spatial_feature=args.spatial_feature,
+                             scaling=args.scaling, scaler=scaler, smooth=args.smooth,
+                             fill_missing=args.fill_missing, check_missing=True,
+                             vis_stack=args.vis_stack, vis_profile=args.vis_profile)
+            # test
+            for p in pretrained:
                 model = CroplandModel(logger, log_time, p.split('_')[-1], args.random_state, pretrained_name=p)
                 model.test(x_test, y_test, meta, index=df_test.index, region_shp_path=label_path,
-                           feature_names=None, pred_name=f'{p}_{district}')
+                           feature_names=feature_names, pred_name=f'{p}_{district}', work_station=args.work_station)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--img_dir', type=str,
-                        default='N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/',
-                        help='Base directory to all the images.')
+    parser.add_argument('--work_station', type=bool, default=True)
+
     parser.add_argument('--tile_id', type=str, default='43RGQ')
     parser.add_argument('--test_regions', type=bool, default=True)
-    parser.add_argument('--pretrained', default=['1212-010141_svc', '1212-010141_rfc', '1212-010141_mlp'],
+    parser.add_argument('--pretrained', default=['1213-215737_rfc', '1213-215737_svc'],
                         help='Filename of the best pretrained models.')
     parser.add_argument('--random_state', type=int, default=24)
 
     parser.add_argument('--vis_stack', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)
-    parser.add_argument('--feature_engineering', type=bool, default=True)
+    parser.add_argument('--feature_engineer', type=bool, default=True)
+    parser.add_argument('--spatial_feature', type=bool, default=True)
     parser.add_argument('--smooth', type=bool, default=False)
-    parser.add_argument('--scaling', type=str, default='normalize',
-                        choices=['as_float', 'as_TOA', 'standardize', 'normalize'])
-    parser.add_argument('--fill_missing', type=str, default='forward', choices=[None, 'forward', 'linear'])
+    parser.add_argument('--scaling', type=str, default='as_reflectance',
+                        choices=['as_float', 'as_reflectance', 'standardize', 'normalize'])
+    parser.add_argument('--fill_missing', type=str, default='linear', choices=[None, 'forward', 'linear'])
 
     args = parser.parse_args()
 

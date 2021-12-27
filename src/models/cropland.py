@@ -45,9 +45,10 @@ class CroplandModel(BaseModel):
             impurity_importance_table(feature_names, self.model.feature_importances_, f'{model_II}')
             self._logger.info(f'  Saved impurity importance to {model_II}')
 
-    def evaluate_by_open_datasets(self, region_shp_path, label_only=True):
+    def evaluate_by_open_datasets(self, region_shp_path, label_only=True, work_station=False):
         self._logger.info('Evaluating by open datasets...')
-        ancilliary_path = 'K:/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/'
+        k_drive = '2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/'
+        ancilliary_path = '/home/lida/DFS/Projects/' + k_drive if work_station else 'K:/' + k_drive
         pred_path = f'./preds/{self.to_name}.tiff'
         district = region_shp_path.split('/')[-2].split('_')[-1]
 
@@ -67,10 +68,11 @@ class CroplandModel(BaseModel):
             dataset, raw_path, evaluate_func = ds['dataset'], ds['raw_path'], ds['evaluate_func']
             out_path = f'./data/open_datasets/{dataset}_{district}.tiff'
             self._logger.info(f'Comparing {dataset.upper()} dataset with predictions...')
-            prepare_open_datasets(raw_path, out_path, pred_path, region_shp_path, label_only)
+            # prepare_open_datasets(raw_path, out_path, pred_path, region_shp_path, label_only)
             evaluate_func(pred_path, out_path, self._logger)
 
-    def test(self, x_test, y_test, meta, index, region_shp_path, feature_names=None, pred_name=None):
+    def test(self, x_test, y_test, meta, index, region_shp_path, feature_names=None, pred_name=None,
+             work_station=False):
         self._logger.info("## Testing")
         if pred_name is not None:
             self.to_name = pred_name
@@ -80,17 +82,17 @@ class CroplandModel(BaseModel):
         self._save_predictions(meta, y_test_pred_converted)
         # evaluate
         self.evaluate_by_metrics(y_test, y_test_pred)
-        self.evaluate_by_open_datasets(region_shp_path, label_only=True)
+        self.evaluate_by_open_datasets(region_shp_path, label_only=True, work_station=work_station)
         if feature_names is not None:
             self.evaluate_by_feature_importance(x_test, y_test, feature_names)
 
-    def predict(self, x, meta, region_shp_path, pred_name=None):
+    def predict(self, x, meta, region_shp_path, pred_name=None, work_station=False):
         self._logger.info("## Predicting")
         if pred_name is not None:
             self.to_name = pred_name
         y_pred = self.model.predict(x)
         self._save_predictions(meta, y_pred)
-        self.evaluate_by_open_datasets(region_shp_path, label_only=False)
+        self.evaluate_by_open_datasets(region_shp_path, label_only=False, work_station=work_station)
 
     def load_pretrained_model(self, pretrained_name):
         self._logger.info(f"Loading pretrained {pretrained_name}...")

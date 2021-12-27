@@ -190,14 +190,14 @@ def plot_profile(data, label, timestamps, veg_index, title=None, save_path=None)
     plt.ylabel(veg_index)
     if title is not None:
         plt.title(title)
-        df.to_csv(f'../figs/{title}.csv', index=False)
+        df.to_csv(f'./figs/{title}.csv', index=False)
     else:
-        df.to_csv(f'../figs/{veg_index}_profile.csv', index=False)
+        df.to_csv(f'./figs/{veg_index}_profile.csv', index=False)
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved {veg_index} profile to {save_path}')
     plt.close()
-    
+
 
 def visualize_cv_fold(grid, meta, save_path):
     shapes = iter([(shapely.geometry.mapping(poly), v + 1) for poly, v in zip(grid.geometry, grid.fold_id)])

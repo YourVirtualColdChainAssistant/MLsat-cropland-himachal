@@ -1,3 +1,9 @@
+== cropland_1213-215737 (train)
+   (test) cropland_1214-190023_predict [svc, rfc]
+	* scaling=reflectance, linear filling, engineer features + spatial features, only svc and rfc
+
+...More experiments about choose scaling and imputation methods, with hyperparameter tuning by grid search 
+
 == cropland_1208-100402 (train)
    (test) cropland_1208-180911_predict [svc, mlp]
 	* scaling=normalize, forward filling, engineer features, all three models
@@ -23,7 +29,7 @@
 	* scaling=stanardize, linear filling, engineer features, all three models 
 
 == cropland_1201-204953 (train)
-   (test) cropland_1202-223708_predict [svc], cropland_1203-094142_predict [mlp], cropland_1203-094703_predict / cropland_1206-132856_predict [rfc]
+   (test) cropland_1202-223708_predict [svc], cropland_1203-094703_predict [mlp], cropland_1203-094703_predict / cropland_1206-132856_predict [rfc]
 	* scaling=TOA, linear filling, engineer features, all three models 
 
 == cropland_1206-215716 (train)
