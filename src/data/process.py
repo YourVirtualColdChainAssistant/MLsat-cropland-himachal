@@ -6,6 +6,8 @@ import argparse
 import rasterio
 import numpy as np
 from src.utils.util import resample, find_file
+import copy
+import multiprocessing
 
 
 def process(args):
@@ -188,9 +190,15 @@ def get_crs_from_SCL(corrected_dir):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--work_station', type=bool, default=False)
-    parser.add_argument('--store_inter', type=bool, default=True, action='store_false',
+    parser.add_argument('--store_inter', default=True, action='store_false',
                         help='Store the intermediate files (raw and L1C) or not.')
-    parser.add_argument('--tile_id', type=str, default='43SFR')
+    parser.add_argument('--tile_ids', nargs="+", default=['43SFR'])
     args = parser.parse_args()
 
-    process(args)
+    args_list, tile_ids = [], args.tile_ids
+    print(f'Parallizing to {len(tile_ids)} processes...')
+    for tile_id in tile_ids:
+        args.tile_id = tile_id
+        args_list.append(copy.deepcopy(args))  # deep copy 
+    process_pool = multiprocessing.Pool(processes=len(tile_ids)) 
+    process_pool.map(process, args_list)
