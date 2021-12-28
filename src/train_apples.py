@@ -4,7 +4,7 @@ import numpy as np
 import geopandas as gpd
 from src.utils.logger import get_log_dir, get_logger
 from src.utils.util import count_classes
-from src.data.prepare_data import prepare_data, construct_grid_to_fold, get_spatial_cv_fold, get_unlabeled_data
+from src.data.prepare import prepare_data, construct_grid_to_fold, get_spatial_cv_fold, get_unlabeled_data
 from src.models.crop import CropModel
 from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
