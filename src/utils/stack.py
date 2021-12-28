@@ -14,6 +14,10 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
     """
     Stack all the timestamps in from_dir folder, ignoring all black images.
 
+    Legend for scene classification, corresponding to 0 to 11:
+        ['NO_DATA', 'SATURATED_OR_DEFECTIVE', 'DARK_AREA_PIXELS', 'CLOUD_SHADOWS', 'VEGETATION', 'NOT_VEGETATED',
+         'WATER', 'UNCLASSIFIED', 'CLOUD_MEDIUM_PROBABILITY', 'CLOUD_HIGH_PROBABILITY', 'THIN_CIRRUS', 'SNOW']
+
     :param logger: std::out
     :param from_dir: string
     :param meta:
@@ -27,7 +31,7 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
 
     :return: bands_array, meta, timestamps_bf, timestamps_weekly
     bands_array: array
-        shape (height, width, n_bands, n_weeks)
+        shape (height, width, n_bands + 1, n_weeks)
     timestamps_bf: the raw timestamps
     """
     if way not in ['raw', 'weekly', 'monthly']:
@@ -55,16 +59,19 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
                 print('Before loading data:', datetime.datetime.now())
                 band, meta = load_geotiff(raster_path, window, read_as)
                 print('After loading data:', datetime.datetime.now())
-                # mask cloud
-                cloudy_mask = band[idx_cloud] != 0
-                nodata_mask = band[idx_other[0]] == 0
-                # nodata_mask_list.append(nodata_mask)
-                band = np.array(band)[idx_other]
+                # mask cloud, where 0 = nodata, 1 = normal, 2 = no need to predict, 3 = cloud,
+                cloud_band = band[idx_cloud]
+                cloud_band[(cloud_band == 1) | (cloud_band == 2) | (cloud_band == 4) | (cloud_band == 5)] = 1
+                cloud_band[(cloud_band == 3) | (cloud_band <= 10) | (cloud_band >= 8)] = 3
+                cloud_band[(cloud_band == 6) | (cloud_band == 11)] = 2
+                band[idx_cloud] = cloud_band
+                cloudy_mask = cloud_band == 2
+                nodata_mask = cloud_band == 0
                 # fill pixels with clouds as 0
-                for j in range(len(band)):
+                for j in idx_other:
                     band[j][cloudy_mask & (~nodata_mask)] = 0
                 # pixel values check
-                if np.array(band).mean() != 0.0:
+                if nodata_mask.sum() == n_total:
                     band_list.append(np.stack(band, axis=2).reshape(-1, len(band)))
                 else:
                     black_ids.append(id)
@@ -108,7 +115,6 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
     #     check_missing_condition(zero_mask_list, timestamps_ref, n_total)
     # print('After checking missing:', datetime.datetime.now())
     # stack finally
-    meta.update(count=meta['count'] - 1)
     # logger.info(f'  avg. cloud coverage = {np.array(p_cloud_list).mean():.4f}')
     # logger.info(f'  avg. filling ratio = {np.array(p_fill_list).mean():.4f}')
 

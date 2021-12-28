@@ -210,13 +210,19 @@ def resample(in_file, h_target, w_target):
         return data, transform
 
 
-def find_file(string, search_path):
+def find_file_all_levels(string, search_path):
     result = []
     # Wlaking top-down from the root
     for root, dir_, files in os.walk(search_path):
-        for f in files:
-            if string in f:
-                filename = f
+        for filename in files:
+            if string in filename:
                 result.append(os.path.join(root, filename))
-                break
+    return result
+
+
+def find_file_top_level(string, search_path):
+    result = []
+    for filename in os.listdir(search_path):
+        if string in filename:
+            result.append(os.path.join(search_path, filename))
     return result

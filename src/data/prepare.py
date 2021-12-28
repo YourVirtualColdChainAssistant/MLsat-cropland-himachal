@@ -7,7 +7,8 @@ import pandas as pd
 import geopandas as gpd
 import rasterio
 from rasterio.windows import Window
-from src.data.engineer import add_bands, get_raw_every_n_weeks, get_statistics, get_difference, get_spatial_features, get_all_spatial_features
+from src.data.engineer import add_bands, get_raw_every_n_weeks, get_statistics, get_difference, get_spatial_features, \
+    get_all_spatial_features
 from src.evaluation.visualize import plot_timestamps, plot_profile
 from src.utils.util import count_classes, load_shp_to_array, multipolygons_to_polygons, \
     prepare_meta_window_descriptions, prepare_meta_descriptions
@@ -87,6 +88,9 @@ def prepare_data(logger, dataset, feature_dir, label_path, task, window=None,
     bands_array, meta, timestamps_raw, timestamps_weekly_ref = \
         stack_timestamps(logger, feature_dir, meta, descriptions, window, read_as=read_as,
                          way=way, check_missing=check_missing)
+    band_mask = bands_array[descriptions.index('cloud mask')]
+    bands_name = list(descriptions)
+    bands_name.remove('cloud mask')
     if fill_missing:
         logger.info(f"# Handle missing data by {fill_missing} filling")
         bands_array = handle_missing_data(bands_array, fill_missing, missing_val=0)
@@ -99,8 +103,6 @@ def prepare_data(logger, dataset, feature_dir, label_path, task, window=None,
         plot_timestamps(timestamps_weekly_ref, None, f'../figs/timestamps_{way}_{dataset}.png')
 
     logger.info('# Build features')
-    bands_name = list(descriptions)
-    bands_name.remove('cloud mask')
     if new_bands_name:
         bands_array = add_bands(logger, bands_array, descriptions, new_bands_name)
         bands_name += new_bands_name
@@ -109,6 +111,7 @@ def prepare_data(logger, dataset, feature_dir, label_path, task, window=None,
     feature_names = df.columns
     n_feature = feature_names.shape[0]
     logger.info(f'\nFeatures: {feature_names}')
+    df['mask'] = band_mask.reshape(-1)
 
     if 'predict' not in dataset:
         # get y

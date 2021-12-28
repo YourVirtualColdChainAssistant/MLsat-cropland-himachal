@@ -60,12 +60,8 @@ def add_bands(logger, img, descriptions, new_bands_name=['ndvi']):
         logger.info(f'Adding new bands {new_bands_name}...')
         new_bands = []
 
-        band_map = {
-            'blue': 'B02',
-            'green': 'B03',
-            'red': 'B04',
-            'nir': 'B08'
-        }
+        band_map = {'ultra_blue': 'B01', 'blue': 'B02', 'green': 'B03', 'red': 'B04', 'red_edge': 'B05',
+                    'nir': 'B08', 'narrow_nir': 'B8A', 'water_vapour': 'B09', 'cirrus': 'B10'}
 
         # bands
         blue = img[:, :, descriptions.index(band_map['blue']), :]
@@ -214,7 +210,7 @@ def get_all_spatial_features(logger, bands_name, arr):
     logger.info('Adding all spatial features')
     height, width, _, n_weeks = arr.shape
     df = pd.DataFrame()
-    for i, b in enumerate(bands_name): 
+    for i, b in enumerate(bands_name):
         mean_list, std_list = [], []
         for r in range(height):
             for c in range(width):

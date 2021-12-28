@@ -15,7 +15,7 @@ from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 
 def cropland_classification(args):
-    testing = False
+    testing = True
     if args.work_station:
         args.img_dir = '/mnt/N/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/'
     else:
@@ -91,10 +91,10 @@ def cropland_classification(args):
         'svc': {'C': 10, 'gamma': 'auto', 'kernel': 'poly', 'random_state': args.random_state},
         'rfc': {'criterion': 'entropy', 'max_depth': 10, 'max_samples': 0.8, 'n_estimators': 100,
                 'random_state': args.random_state},
-        # 'mlp': {'activation': 'relu', 'alpha': 0.0001, 'early_stopping': True, 'hidden_layer_sizes': (300,),
-        #         'max_iter': 200, 'random_state': args.random_state}
+        'mlp': {'activation': 'relu', 'alpha': 0.0001, 'early_stopping': True, 'hidden_layer_sizes': (300,),
+                'max_iter': 200, 'random_state': args.random_state}
     }
-    for m in best_params.keys():
+    for m in args.models:
         model = CroplandModel(logger, log_time, m, args.random_state)
         if args.cv_type is None:
             model.fit_best(x_train_val, y_train_val, best_params[m])
@@ -132,6 +132,7 @@ if __name__ == '__main__':
     # hyper parameter
     parser.add_argument('--hp_search_by', type=str, default='grid', choices=['random', 'grid'],
                         help='Method to find hyper-parameters.')
+    parser.add_argument('--models', nargs="+", default=['svc', 'rfc', 'mlp'])
 
     # prepare data
     parser.add_argument('--vis_stack', type=bool, default=False)
