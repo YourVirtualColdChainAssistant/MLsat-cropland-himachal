@@ -5,12 +5,13 @@ import zipfile
 import argparse
 import rasterio
 import numpy as np
-from src.utils.util import resample, find_file
+from src.utils.util import resample, find_file_all_levels, find_file_top_level
 import copy
 import multiprocessing
 
 
 def process(args):
+    print(args)
     if args.work_station:
         img_dir = '/mnt/N/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/'
     else:
@@ -23,20 +24,19 @@ def process(args):
         os.mkdir(corrected_dir)
     if not os.path.exists(geotiff_dir):
         os.mkdir(geotiff_dir)
-    
+
     if args.work_station:
-        sen2cor_path = 'home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/Sen2Cor-02.09.00-win64/L2A_Process.bat'
+        sen2cor_path = 'sudo /home/lida/Documents/Sen2Cor-02.09.00-Linux64/bin/L2A_Process'
     else:
-        sen2cor_path = 'K:/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Research/WP1_Danya/Sen2Cor-02.09.00-win64/L2A_Process.bat'
-    # sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
-    # sen2cor_path = '../../Sen2Cor-02.09.00-win64/L2A_Process.bat'
+        sen2cor_path = 'C:\\Users\\lida\\Downloads\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
+        # sen2cor_path = 'N:\\dataorg-datasets\\MLsatellite\\Sen2Cor-02.09.00-win64\\L2A_Process.bat'
     # check which level we downloaded
     processing_level = os.listdir(raw_dir)[0].split('_')[1][3:]
     if processing_level == 'L1C':
         safe_dir = tile_dir + 'L1C/'
         if not os.path.exists(safe_dir):
             os.mkdir(safe_dir)
-        unzip_products(raw_dir, safe_dir, args.store_inter)
+        # unzip_products(raw_dir, safe_dir, args.store_inter)
         atmospheric_correction(sen2cor_path, safe_dir, corrected_dir, args.store_inter)  # absolute path to call sen2cor
     else:
         unzip_products(raw_dir, corrected_dir, args.store_inter)
@@ -64,45 +64,42 @@ def atmospheric_correction(sen2cor_path, safe_dir, corrected_dir, store_inter):
             print(f"[{i}/{len(safe_files)}] {safe_file_dir} corrected!")
         else:
             print(f"[{i}/{len(safe_files)}] Correcting {safe_file_dir}")
-            os.system(f"{sen2cor_path} {safe_file_dir} --output_dir {corrected_dir}")
+            os.system(f'{sen2cor_path} {safe_file_dir} --output_dir {corrected_dir}')
             if not store_inter:
                 shutil.rmtree(safe_file_dir)
     print("Correction done!")
 
 
-def is_corrected(dir_to_correct, corrected_dir):
-    # filename inside the GRANULE folder in safe folder
-    name_to_correct = os.listdir(dir_to_correct + '/GRANULE/')[0]
-    # check what's in the corrected folder one by one
-    for corrected in os.listdir(corrected_dir):
-        # filename inside the GRANULE folder in corrected folder
-        name_corrected = os.listdir(corrected_dir + corrected + '/GRANULE/')[0]
-        path_corrected = corrected_dir + corrected + '/GRANULE/' + name_corrected + '/IMG_DATA/'
-        # check if two folder names are the same
-        flag_name = name_to_correct.split('_')[1:] == name_corrected.split('_')[1:]
-        if not flag_name:
-            continue
-        # TODO: fail if no file in GRANULE...
-        # check file existence
-        res_expected_num = [7, 13, 15]
-        flag_res = True
-        for i, res in enumerate(['R10m/', 'R20m/', 'R60m/']):
-            if os.path.exists(path_corrected + res):
-                if len(os.listdir(path_corrected + res)) != res_expected_num[i]:
-                    # file number doesn't match
-                    flag_res = False
-                    shutil.rmtree(corrected_dir + corrected)
-                    print(f'Deleted {corrected_dir + corrected}')
-                    break
-            else:
-                # resolution files are not existent
-                flag_res = False
-                shutil.rmtree(corrected_dir + corrected)
-                print(f'Deleted {corrected_dir + corrected}')
-                break
-        if flag_res:
-            return True
-    return False
+def is_corrected(file_dir_to_correct, corrected_dir):
+    name_L1C = os.listdir(file_dir_to_correct + '/GRANULE/')[0]
+    name_L2A = name_L1C.replace('L1C', 'L2A')
+    result = find_file_top_level(name_L1C, corrected_dir)
+    if len(result) == 0:
+        return False
+    elif len(result) == 1:
+        folder_L2A = result[0]
+        corrected = False
+        if set(os.listdir(folder_L2A)) == {'AUX_DATA', 'GRANULE', 'DATASTRIP', 'rep_info', 'INSPIRE.xml',
+                                           'manifest.safe', 'MTD_MSIL2A.xml'}:
+            path_L2A = folder_L2A + '/GRANULE/' + name_L2A + '/IMG_DATA/'
+            if len(os.listdir(path_L2A)) == 3:
+                n_expected = [7, 13, 15]
+                all_exist = True
+                for i, resolution in enumerate(['R10m/', 'R20m/', 'R60m/']):
+                    if len(os.listdir(path_L2A + resolution)) != n_expected[i]:
+                        all_exist = False
+                        break
+                if all_exist:
+                    corrected = True
+        if not corrected:
+            shutil.rmtree(folder_L2A)
+            print(f'Deleted {folder_L2A}')
+        return corrected
+    else:
+        for folder_L2A in result:
+            shutil.rmtree(folder_L2A)
+        print(f'Deleted {result}')
+        return False
 
 
 def merge_to_raster(corrected_dir, geotiff_dir):
@@ -119,7 +116,7 @@ def merge_to_raster(corrected_dir, geotiff_dir):
         file_name = os.listdir(in_dir)[0]
         in_path = in_dir + file_name + '/IMG_DATA/R10m/*_B*.jp2'
         out_path = geotiff_dir + file_name + '.tiff'
-        cloud_path = find_file('SCL_60m.jp2', in_dir)
+        cloud_path = find_file_all_levels('SCL_60m.jp2', in_dir)
         convert_jp2_to_tiff(in_path, out_path, cloud_path, crs)
         print(f'[{i}/{len(file_paths)}] merged {out_path}')
     print('Merge done!')
@@ -151,7 +148,7 @@ def convert_jp2_to_tiff(in_path, out_path, cloud_path, crs):
     # Read metadata of first file
     with rasterio.open(jp2_path[0]) as src0:
         meta = src0.meta
-        
+
     # prepare cloud mask
     if len(cloud_path) == 1:
         cloud_img, _ = resample(cloud_path[0], meta['height'], meta['width'])
@@ -179,7 +176,7 @@ def convert_jp2_to_tiff(in_path, out_path, cloud_path, crs):
 def get_crs_from_SCL(corrected_dir):
     corrected_names = os.listdir(corrected_dir)
     for corrected_name in corrected_names:
-        file = find_file('SCL_60m.jp2', corrected_dir + corrected_name)
+        file = find_file_all_levels('SCL_60m.jp2', corrected_dir + corrected_name)
         if len(file) == 1:
             data = rasterio.open(file[0])
             return data.crs
@@ -192,7 +189,7 @@ if __name__ == '__main__':
     parser.add_argument('--work_station', type=bool, default=False)
     parser.add_argument('--store_inter', default=True, action='store_false',
                         help='Store the intermediate files (raw and L1C) or not.')
-    parser.add_argument('--tile_ids', nargs="+", default=['43SFR'])
+    parser.add_argument('--tile_ids', nargs="+", default=['43SES'])
     args = parser.parse_args()
 
     args_list, tile_ids = [], args.tile_ids
@@ -200,5 +197,5 @@ if __name__ == '__main__':
     for tile_id in tile_ids:
         args.tile_id = tile_id
         args_list.append(copy.deepcopy(args))  # deep copy 
-    process_pool = multiprocessing.Pool(processes=len(tile_ids)) 
+    process_pool = multiprocessing.Pool(processes=len(tile_ids))
     process_pool.map(process, args_list)
