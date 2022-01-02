@@ -8,6 +8,7 @@ import skimage
 import rasterio
 from rasterio.windows import Window
 from rasterio.enums import Resampling
+from src.evaluation.evaluate import adjust_raster_size
 
 
 def load_geotiff(path, window=None, read_as='as_integer'):
@@ -19,11 +20,12 @@ def load_geotiff(path, window=None, read_as='as_integer'):
     """
     with rasterio.open(path) as f:
         if read_as == 'as_float':
-            band = [skimage.img_as_float(f.read(i + 1, window=window)) for i in range(f.count)]
+            band = [skimage.img_as_float(f.read(i + 1, window=window)) for i in range(f.count - 1)]
         elif read_as == 'as_reflectance':
-            band = [f.read(i + 1, window=window) / 10000 for i in range(f.count)]
+            band = [f.read(i + 1, window=window) / 10000 for i in range(f.count - 1)]
         else:  # normal read as integer
-            band = [f.read(i + 1, window=window) for i in range(f.count)]
+            band = [f.read(i + 1, window=window) for i in range(f.count - 1)]
+        band.append(f.read(f.count, window=window))
         meta = f.meta
         if window is not None:
             meta['height'] = window.height
@@ -32,25 +34,37 @@ def load_geotiff(path, window=None, read_as='as_integer'):
     return band, meta
 
 
-def save_predictions_geotiff(meta_src, predictions, save_path):
-    # Register GDAL format drivers and configuration options with a context manager
-    color_map = {
-        0: (0, 0, 0),
-        1: (240, 65, 53),
-        2: (154, 205, 50),
-        3: (184, 134, 11),
-        255: (255, 255, 255)
-    }
-    with rasterio.Env():
-        # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
-        out_meta = meta_src.copy()
-        out_meta.update(
-            dtype=rasterio.uint8,
-            count=1)
-        with rasterio.open(save_path, 'w', **out_meta) as dst:
-            # reshape into (band, height, width)
-            dst.write(predictions.reshape(1, out_meta['height'], out_meta['width']).astype(rasterio.uint8))
-            dst.write_colormap(1, color_map)
+def save_predictions_geotiff(predictions, meta_src, save_path, region_indicator,
+                             cat_mask, color_by_height=False):
+    color_map = {0: (0, 0, 0), 2: (154, 205, 50)}
+    # color_map_2 = {0: (0, 0, 0), 1: (255, 255, 255), 2: (0, 0, 255), 3: (0, 255, 0)}
+    # color_map_3 = {-9999: (0,0,0), -9998: (0, 0, 0), 0: (255, 255, 255), 3000: (255, 0, 0)}
+    out_meta = meta_src.copy()
+    if color_by_height:
+        height_map_path = '../../../Data/layers_india/ancilliary_data/elevation/IND_alt.vrt'
+        adjust_raster_size(height_map_path, './data/open_datasets/height_map.tiff',
+                           region_indicator, meta_src, label_only=False)
+        with rasterio.open('./data/open_datasets/height_map.tiff') as f:
+            height_map = f.read(1).reshape(-1)
+        height_map[predictions != 2] = -9998
+        with rasterio.Env():
+            # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
+            out_meta.update(dtype=rasterio.int16, count=3)
+            with rasterio.open(save_path, 'w', **out_meta) as dst:
+                # reshape into (band, height, width)
+                dst.write_band(1, predictions.reshape(out_meta['height'], out_meta['width']).astype(rasterio.int16))
+                dst.write_band(2, cat_mask.reshape(out_meta['height'], out_meta['width']).astype(rasterio.int16))
+                dst.write_band(3, height_map.reshape(out_meta['height'], out_meta['width']).astype(rasterio.int16))
+                dst.write_colormap(1, color_map)
+    else:
+        with rasterio.Env():
+            # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
+            out_meta.update(dtype=rasterio.uint8, count=2)
+            with rasterio.open(save_path, 'w', **out_meta) as dst:
+                # reshape into (band, height, width)
+                dst.write(predictions.reshape(out_meta['height'], out_meta['width']), 1)
+                dst.write(cat_mask.reshape(out_meta['height'], out_meta['width']), 2)
+                dst.write_colormap(1, color_map)
 
 
 def load_shp_to_array(shp_path, meta):
@@ -162,17 +176,16 @@ def prepare_meta_window_descriptions(geotiff_dir, label_path):
     label_shp = label_shp.to_crs(dst_crs)
     window = get_window(transform, label_shp.total_bounds)
 
-    _, meta = load_geotiff(img_path, window, read_as='as_raw')
+    _, meta = load_geotiff(img_path, window, read_as='as_integer')
     return meta, window, descriptions
 
 
 def prepare_meta_descriptions(geotiff_dir, window):
     img_path = geotiff_dir + os.listdir(geotiff_dir)[0]
     img = rasterio.open(img_path)
-    transform, dst_crs, descriptions = img.transform, img.crs, img.descriptions
 
-    _, meta = load_geotiff(img_path, window, read_as='as_raw')
-    return meta, descriptions
+    _, meta = load_geotiff(img_path, window, read_as='as_integer')
+    return meta, img.descriptions
 
 
 def get_window(transform, bounds):
@@ -212,7 +225,7 @@ def resample(in_file, h_target, w_target):
 
 def find_file_all_levels(string, search_path):
     result = []
-    # Wlaking top-down from the root
+    # Walking top-down from the root
     for root, dir_, files in os.walk(search_path):
         for filename in files:
             if string in filename:
@@ -226,3 +239,12 @@ def find_file_top_level(string, search_path):
         if string in filename:
             result.append(os.path.join(search_path, filename))
     return result
+
+
+def save_cv_results(cv_results, save_path):
+    df = pd.DataFrame()
+    # save result
+    for i in ['params', 'mean_test_score', 'std_test_score', 'rank_test_score',
+              'mean_fit_time', 'std_fit_time', 'mean_score_time', 'std_score_time']:
+        df[i] = cv_results[i]
+    df.to_csv(save_path, index=False, header=True)

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import collections
 
 
-def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as='as_raw',
+def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as='as_integer',
                      way='weekly', check_missing=False):
     """
     Stack all the timestamps in from_dir folder, ignoring all black images.
@@ -29,9 +29,11 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
         choices = ['raw', 'weekly', 'monthly']
     :param check_missing: bool
 
-    :return: bands_array, meta, timestamps_bf, timestamps_weekly
+    :return: bands_array, cat_pixel, meta, timestamps_bf, timestamps_weekly
     bands_array: array
-        shape (height, width, n_bands + 1, n_weeks)
+        shape (height, width, n_bands, n_weeks)
+    cat_pixel: array
+        shape (height * width, )
     timestamps_bf: the raw timestamps
     """
     if way not in ['raw', 'weekly', 'monthly']:
@@ -45,56 +47,45 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
     idx_cloud = descriptions.index('cloud mask')
     idx_other = list(range(meta['count']))
     idx_other.pop(idx_cloud)
-    bands_list, black_ids, p_cloud_list, p_fill_list, zero_mask_list = [], [], [], [], []
+    meta.update({'count': len(idx_other)})
+    band_lists, cat_mask_lists, black_ids, p_cloud_list, p_fill_list, p_zero_list = [], [], [], [], [], []
     for i, timestamp in enumerate(timestamps_ref, start=1):
         # get all the indices
         ids = timestamps_af_pd[timestamps_af_pd.eq(timestamp)].index
-        band_list = []
+        band_list, cat_mask_list = [], []
         # with non-empty data, check missing data
         if len(ids) != 0:
-            cloud_coverage, nodata_mask_list = [], []
             for id in ids:
                 # read band
                 raster_path = from_dir + filenames[id]
                 print('Before loading data:', datetime.datetime.now())
-                band, meta = load_geotiff(raster_path, window, read_as)
+                band, _ = load_geotiff(raster_path, window, read_as)
                 print('After loading data:', datetime.datetime.now())
-                # mask cloud, where 0 = nodata, 1 = normal, 2 = no need to predict, 3 = cloud,
-                cloud_band = band[idx_cloud]
-                cloud_band[(cloud_band == 1) | (cloud_band == 2) | (cloud_band == 4) | (cloud_band == 5)] = 1
-                cloud_band[(cloud_band == 3) | (cloud_band <= 10) | (cloud_band >= 8)] = 3
-                cloud_band[(cloud_band == 6) | (cloud_band == 11)] = 2
-                band[idx_cloud] = cloud_band
-                cloudy_mask = cloud_band == 2
-                nodata_mask = cloud_band == 0
-                # fill pixels with clouds as 0
-                for j in idx_other:
-                    band[j][cloudy_mask & (~nodata_mask)] = 0
+                cat_mask = categorize_scene_classification(band[idx_cloud])
+                band = np.stack(band, axis=2)[:,:,idx_other]
                 # pixel values check
-                if nodata_mask.sum() == n_total:
-                    band_list.append(np.stack(band, axis=2).reshape(-1, len(band)))
-                else:
+                if (cat_mask == 0).sum() != n_total:
+                    band_list.append(band.reshape(-1, meta['count']))
+                    cat_mask_list.append(cat_mask.reshape(-1))
+                else:  # all empty 
                     black_ids.append(id)
 
         # stack by index
         if len(band_list) != 0:
             # merge images of a period by taking max
-            band_list = np.stack(band_list, axis=2).max(axis=2)
-            # check the real number of no data, influenced by merging several images
-            # nodata_mask = nodata_mask_list[0]
-            # for m in nodata_mask_list:
-            #     nodata_mask = nodata_mask & m
-            # zero_mask = band_list[:, 0] == 0
-            # n_nodata = nodata_mask.sum()
-            # n_zero = zero_mask.sum()
-            # zero_mask_list.append(zero_mask)
-            # p_cloud_list.append(round((n_zero - n_nodata) / n_total, 4))
-            # p_fill_list.append(round(n_zero / n_total, 4))
+            band_list, cat_mask_list = get_cloudless(band_list, cat_mask_list)
+            # check gaps
+            n_zero = (band_list[:,0] == 0).sum()
+            n_nodata = (cat_mask_list == 0).sum()
+            n_cloudy = (cat_mask_list == 1).sum()
+            p_zero_list.append(round(n_zero / n_total, 4))
+            p_cloud_list.append(round(n_cloudy / n_total, 4))
+            p_fill_list.append(round((n_nodata + n_cloudy) / n_total, 4))
         else:  # i == 1:
-            band_list = np.zeros((meta['height'] * meta['width'], meta['count'] - 1))
-            # zero_mask_list.append(np.ones((meta['height'] * meta['width'])))
-            # p_cloud_list.append(0)
-            # p_fill_list.append(1)
+            band_list = np.zeros((meta['height'] * meta['width'], meta['count']))
+            cat_mask_list = np.zeros(meta['height'] * meta['width'])
+            p_cloud_list.append(1)
+            p_fill_list.append(1)
 
         # print
         if len(ids) != 0:
@@ -107,20 +98,20 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} ({print_str})')
         else:  # i == 1 or
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (0)')
-        # TODO: cloud and filling ratio is not correctly calculated (include pixels not test)
-        bands_list.append(band_list)
+        band_lists.append(band_list)
+        cat_mask_lists.append(cat_mask_list)
+    
+    logger.info(f'  avg. cloud coverage = {np.array(p_cloud_list).mean():.4f}')
+    logger.info(f'  avg. filling ratio = {np.array(p_fill_list).mean():.4f}')
+    logger.info(f'  avg. zero ratio = {np.array(p_zero_list).mean():.4f}')
 
-    # print('Before checking missing:', datetime.datetime.now())
-    # if check_missing:
-    #     check_missing_condition(zero_mask_list, timestamps_ref, n_total)
-    # print('After checking missing:', datetime.datetime.now())
+    # decide cat for each pixel 
+    cat_pixel = categorize_pixel(cat_mask_lists)
+    
     # stack finally
-    # logger.info(f'  avg. cloud coverage = {np.array(p_cloud_list).mean():.4f}')
-    # logger.info(f'  avg. filling ratio = {np.array(p_fill_list).mean():.4f}')
+    bands_array = np.stack(band_lists, axis=2).reshape(meta['height'], meta['width'], meta['count'], -1)
 
-    bands_array = np.stack(bands_list, axis=2).reshape(meta['height'], meta['width'], meta['count'], -1)
-
-    return bands_array, meta, timestamps_bf, timestamps_ref
+    return bands_array, cat_pixel, meta, timestamps_bf, timestamps_ref
 
 
 def get_timestamps(filenames, way):
@@ -234,3 +225,51 @@ def save_dict_to_df(d, save_path):
     df['con'] = d.keys()
     df['occ'] = d.values()
     df.to_csv(save_path, index=False)
+
+
+def categorize_scene_classification(scene):
+    # mask cloud, where 0 = nodata, 1 = cloudy, 2 = no need to predict, 3 = normal
+    cat_mask = np.zeros_like(scene)
+    cat_mask[(scene == 1) | (scene == 2) | (scene == 4) | (scene == 5)] = 3
+    cat_mask[(scene == 6) | (scene == 11)] = 2
+    cat_mask[(scene == 3) | (scene == 7) | (scene == 8) | (scene == 9) | (scene == 10)] = 1
+    return cat_mask
+
+
+def get_cloudless(band_list, cat_mask_list):
+    """
+    band_list: A list of nd.array
+        shape (height * width, n_band)
+    cat_mask_list: A list of nd.array
+        shape (height * width, )
+    """
+    band_stacked = np.stack(band_list, axis=2)
+    cat_mask_stacked = np.stack(cat_mask_list, axis=1)
+    cat_mask_cloudless = cat_mask_stacked.max(axis=1)
+    # get cloudless by taking max
+    cloudy_mask = (cat_mask_cloudless == 1)
+    argmax = cat_mask_stacked.argmax(axis=1)
+    band_cloudless = band_stacked[np.arange(argmax.shape[0]), :, argmax]
+    # fill cloudy data as 0 for further processing
+    band_cloudless[cloudy_mask] = 0
+    return band_cloudless, cat_mask_cloudless
+
+
+def categorize_pixel(cat_mask_lists):
+    """
+    cat_mask_lists: A list of nd.array
+        n_col of shape (height * width)
+    """
+    cat_mask_stacked = np.stack(cat_mask_lists, axis=1)
+    n_data, n_col = cat_mask_stacked.shape
+    n0 = (cat_mask_stacked == 0).sum(axis=1)
+    n1 = (cat_mask_stacked == 1).sum(axis=1)
+    n2 = (cat_mask_stacked == 2).sum(axis=1)
+    n3 = (cat_mask_stacked == 3).sum(axis=1)
+    
+    cat_pixel = np.zeros(n_data)  # by default = No Data 
+    more = np.stack([n2, n3], axis=1).argmax(axis=1)
+    cat_pixel[((n0+n1) != n_col) & (more == 0)] = 2  # don't predict 
+    cat_pixel[((n0+n1) != n_col) & (more == 1)] = 3  # predict 
+
+    return cat_pixel

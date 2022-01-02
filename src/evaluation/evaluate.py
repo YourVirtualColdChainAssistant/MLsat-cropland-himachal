@@ -1,5 +1,7 @@
 import os
 import fiona
+import skimage 
+from rasterio.windows import Window
 import shapely
 import argparse
 import numpy as np
@@ -7,26 +9,56 @@ import pandas as pd
 import geopandas as gpd
 import rasterio
 from sklearn.inspection import permutation_importance
-from src.utils.util import load_geotiff
 from src.utils.clip import clip_single_raster
+import pyproj
 
 
-def prepare_open_datasets(dataset_path, out_path, pred_path, region_shp_path, label_only=True):
+def load_geotiff(path, window=None, read_as='as_integer'):
+    """ Load the geotiff as a list of numpy array.
+        INPUT : path (str) -> the path to the geotiff
+                window (rasterio.windows.Window) -> the window to use when loading the image
+        OUTPUT : band (list of numpy array) -> the different bands unscaled
+                 meta (dictionary) -> the metadata associated with the geotiff
+    """
+    with rasterio.open(path) as f:
+        if read_as == 'as_float':
+            band = [skimage.img_as_float(f.read(i + 1, window=window)) for i in range(f.count - 1)]
+        elif read_as == 'as_reflectance':
+            band = [f.read(i + 1, window=window) / 10000 for i in range(f.count - 1)]
+        else:  # normal read as integer
+            band = [f.read(i + 1, window=window) for i in range(f.count - 1)]
+        band.append(f.read(f.count, window=window))
+        meta = f.meta
+        if window is not None:
+            meta['height'] = window.height
+            meta['width'] = window.width
+            meta['transform'] = f.window_transform(window)
+    return band, meta
+
+
+def adjust_raster_size(dataset_path, out_path, region_indicator, meta, label_only=True):
     # clip to a bounding box, to reduce computation cost
-    region_shp = gpd.read_file(region_shp_path)
-    minx, miny, maxx, maxy = region_shp.total_bounds
-    box_shp = gpd.GeoDataFrame({'geometry': shapely.geometry.box(minx, miny, maxx, maxy)}, index=[0])
-    box_shp = box_shp.set_crs(region_shp.crs)
+    if isinstance(region_indicator, str):
+        region_shp = gpd.read_file(region_indicator).to_crs(meta['crs'])
+        minx, miny, maxx, maxy = region_shp.total_bounds
+        box_shp = gpd.GeoDataFrame({'geometry': shapely.geometry.box(minx, miny, maxx, maxy)}, index=[0])
+        box_shp = box_shp.set_crs(meta['crs'])
+    elif isinstance(region_indicator, Window):
+        minx, miny, maxx, maxy = rasterio.windows.bounds(region_indicator, meta['transform'])
+        box_shp = gpd.GeoDataFrame({'geometry': shapely.geometry.box(minx, miny, maxx, maxy)}, index=[0])
+        box_shp = box_shp.set_crs(meta['crs'])
+    else:
+        raise ValueError(f'Cannot adjust raster size by {region_indicator}')
     inter_path = out_path.replace(out_path.split('_')[-1], 'intermediate_result.tiff')
-    clip_open_datasets_to_shp(dataset_path, inter_path, box_shp)
+    clip_raster_to_shp(dataset_path, inter_path, box_shp)
     # align with same resolution
-    align_raster(pred_path, inter_path, out_path)
+    align_raster(inter_path, out_path, meta, (minx, miny, maxx, maxy))
     if label_only:
-        clip_open_datasets_to_shp(out_path, out_path, region_shp)
+        clip_raster_to_shp(out_path, out_path, region_shp)
     os.remove(inter_path)
 
 
-def clip_open_datasets_to_shp(in_path, out_path, region_shp):
+def clip_raster_to_shp(in_path, out_path, region_shp):
     with rasterio.open(in_path, 'r') as src0:
         in_crs = src0.crs
     if region_shp.crs != in_crs:
@@ -35,18 +67,17 @@ def clip_open_datasets_to_shp(in_path, out_path, region_shp):
     clip_single_raster(region_shapes, in_path, out_path)
 
 
-def align_raster(pred_path, in_path, out_path):
+def align_raster(in_path, out_path, meta, bounds):
     """
     Align according to prediction file (with boundary and resolution adjustment).
-
+    -te {bounds.left} {bounds.bottom} {bounds.right} {bounds.top}
+    bounds = (minx, miny, maxx, maxy)
     """
-    # prepare source info
-    bounds = rasterio.open(pred_path).bounds
-    _, meta_tar = load_geotiff(pred_path)
-
+    # gdalwarp cannot support ogc_wkt, so convert to esri_wkt
+    crs = pyproj.CRS.from_string(meta['crs'].to_string()).to_wkt(version='WKT1_ESRI')
     # command
-    cmd = f"gdalwarp -overwrite -r average -t_srs {meta_tar['crs']} -ts {meta_tar['width']} {meta_tar['height']} " + \
-          f"-te {bounds.left} {bounds.bottom} {bounds.right} {bounds.top} {in_path} {out_path}"
+    cmd = f"gdalwarp -overwrite -r average -t_srs {crs} -ts {meta['width']} {meta['height']} " + \
+          f"-te {bounds[0]} {bounds[1]} {bounds[2]} {bounds[3]} {in_path} {out_path}"
     returned_val = os.system(cmd)
     if returned_val == 0:
         print('Aligned raster!')
@@ -54,7 +85,7 @@ def align_raster(pred_path, in_path, out_path):
         raise ValueError('Alignment failed!')
 
 
-def evaluate_by_gfsad(pred_path, dataset_path, logger=None):
+def evaluate_by_gfsad(pred_path, dataset_path):
     """
     Compare with GFSAD dataset to evaluate the overlap with croplands.
     Legend of GFSAD: 2 = croplands, 1 = non-croplands.
@@ -66,32 +97,29 @@ def evaluate_by_gfsad(pred_path, dataset_path, logger=None):
         path of predictions to compare
     dataset_path: string
         path of gfsad dataset
-    logger:
 
     Returns
     -------
 
     """
     # load data
-    band_pred, meta_pred = load_geotiff(pred_path, read_as='as_integer')
-    band_dataset, meta_dataset = load_geotiff(dataset_path, read_as='as_integer')
+    band_pred, _ = load_geotiff(pred_path, read_as='as_integer')
+    band_dataset, _ = load_geotiff(dataset_path, read_as='as_integer')
     band_pred = band_pred[0]
     band_dataset = band_dataset[0]
 
+    # calculate
     n_dataset = (band_dataset == 2).sum()
     n_pred = (band_pred[band_dataset == 2] == 2).sum()
 
-    if logger is None:
-        print(f'Cropland pixel number in GFASD: {n_dataset}')
-        print(f'Cropland pixel number in prediction: {n_pred}')
-        print(f'Percentage: {n_pred / n_dataset * 100:.2f}%')
-    else:
-        logger.info(f'Cropland pixel number in GFASD: {n_dataset}')
-        logger.info(f'Cropland pixel number in prediction: {n_pred}')
-        logger.info(f'Percentage: {n_pred / n_dataset * 100:.2f}%')
+    # result
+    msg = f'\nCropland pixel number in GFASD: {n_dataset}' + \
+            f'\nCropland pixel number in prediction: {n_pred}' + \
+            f'\nPercentage: {n_pred / n_dataset * 100:.2f}%'
+    return msg 
 
 
-def evaluate_by_copernicus(pred_path, dataset_path, logger=None):
+def evaluate_by_copernicus(pred_path, dataset_path):
     """
     Compare with Copernicus dataset to evaluate the overlap of non-croplands.
     Legend of Copernicus: 50 = built-up, 111 = closed forest / evergreen needle leaf.
@@ -103,29 +131,26 @@ def evaluate_by_copernicus(pred_path, dataset_path, logger=None):
         path of predictions to compare
     dataset_path: string
         path of gfsad dataset
-    logger
 
     Returns
     -------
 
     """
     # load data
-    band_pred, meta_pred = load_geotiff(pred_path, read_as='as_integer')
-    band_dataset, meta_dataset = load_geotiff(dataset_path, read_as='as_integer')
+    band_pred, _ = load_geotiff(pred_path, read_as='as_integer')
+    band_dataset, _ = load_geotiff(dataset_path, read_as='as_integer')
     band_pred = band_pred[0]
     band_dataset = band_dataset[0]
 
     # calculate
     n_dataset = ((band_dataset == 50) | (band_dataset == 111)).sum()
     n_pred = (band_pred[(band_dataset == 50) | (band_dataset == 111)] == 3).sum()
-    if logger is None:
-        print(f'Non-cropland pixel number in Copernicus: {n_dataset}')
-        print(f'Non-cropland pixel number in prediction: {n_pred}')
-        print(f'Percentage: {n_pred / n_dataset * 100:.2f}%')
-    else:
-        logger.info(f'Non-cropland pixel number in Copernicus: {n_dataset}')
-        logger.info(f'Non-cropland pixel number in prediction: {n_pred}')
-        logger.info(f'Percentage: {n_pred / n_dataset * 100:.2f}%')
+
+    # result
+    msg = f'\nNon-cropland pixel number in Copernicus: {n_dataset}' + \
+          f'\nNon-cropland pixel number in prediction: {n_pred}' + \
+          f'\nPercentage: {n_pred / n_dataset * 100:.2f}%'
+    return msg
 
 
 def diff_two_predictions(pred_path_1, pred_path_2):

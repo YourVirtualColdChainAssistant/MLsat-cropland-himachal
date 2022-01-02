@@ -1,218 +1,208 @@
 import pickle
+from numpy import meshgrid
 from scipy.stats import uniform, loguniform, randint
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import classification_report
-from src.evaluation.evaluate import prepare_open_datasets, \
-    evaluate_by_gfsad, evaluate_by_copernicus, \
+from src.evaluation.evaluate import evaluate_by_gfsad, evaluate_by_copernicus, \
     impurity_importance_table, permutation_importance_table
-from src.models.base_model import BaseModel
+
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.feature_selection import SequentialFeatureSelector
+from sklearn.feature_selection import SelectKBest, f_classif
+from src.models.base_model import convert_partial_predictions
+from src.utils.util import save_predictions_geotiff
+from src.evaluation.evaluate import adjust_raster_size
+        
+
+def test(logger, model, x_test, y_test, meta, index, cat_mask, region_shp_path, 
+        pred_name, color_by_height, feature_names=None, work_station=False):
+    logger.info("## Testing")
+    # predict
+    y_test_pred = model.predict(x_test)
+    y_test_pred_converted = convert_partial_predictions(y_test_pred, index, meta)
+    # save prediction
+    pred_path = f'./preds/{pred_name}.tiff'
+    save_predictions_geotiff(y_test_pred_converted, meta, pred_path, region_shp_path, 
+                            cat_mask, color_by_height)
+    logger.info(f'Saved predictions to {pred_path}')
+    # evaluate
+    logger.info('Evaluating by metrics...')
+    metrics = evaluate_by_metrics(y_test, y_test_pred)
+    logger.info(f'\n{metrics}')
+    logger.info('Evaluating by open datasets')
+    msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_name, label_only=True, work_station=work_station)
+    for msg in msgs:
+        logger.info(msg)
+    if feature_names is not None:
+        logger.info('Evaluating by feature importance...')
+        evaluate_by_feature_importance(model, x_test, y_test, feature_names, pred_name)
 
 
-class CroplandModel(BaseModel):
-    def __init__(self, logger, log_time, model_name, random_state, pretrained_name=None):
-        # inherent from parent
-        super().__init__(logger, log_time, model_name, random_state)
-        self._check_model_name(model_list=['svc', 'rfc', 'mlp'])
-        # load pretrained
-        if pretrained_name is not None:
-            self._logger.info(f'Changed log time from {log_time} to {pretrained_name.split("_")[0]}')
-            self._log_time = pretrained_name.split('_')[0]
-            if pretrained_name.split('_')[1] != self.model_name:
-                raise ValueError('Initialized model is not the same as the pretrained model.')
-            self.load_pretrained_model(f'./models/{pretrained_name}.pkl')
+def predict(logger, model, x, meta, cat_mask, region_shp_path, 
+            pred_name, color_by_height, work_station=False):
+    logger.info("## Predicting")
+    y_pred = model.predict(x)
+    # save prediction
+    pred_path = f'./preds/{pred_name}.tiff'
+    save_predictions_geotiff(y_pred, meta, pred_path, region_shp_path, cat_mask, color_by_height)
+    logger.info(f'Saved predictions to {pred_path}')
+    # evaluate 
+    msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_name, label_only=False, work_station=work_station)
+    for msg in msgs:
+        logger.info(msg)
 
-    def find_best_hyperparams(self, x_train_val, y_train_val, scoring=None, search_by='grid', cv=3, n_iter=10,
-                              testing=False):
-        super().find_best_hyperparams(x_train_val, y_train_val, scoring=scoring, search_by=search_by, cv=cv,
-                                      n_iter=n_iter, testing=testing)
 
-    def evaluate_by_metrics(self, y_test, y_test_pred):
-        self._logger.info('Evaluating by metrics...')
-        # !! `labels` is related to the discrete number
-        self._logger.info(
-            f"\n{classification_report(y_test, y_test_pred, labels=[2, 3], target_names=['croplands', 'non-croplands'])}"
+def evaluate_by_metrics(y_test, y_test_pred):
+    # !! `labels` is related to the discrete number
+    return classification_report(y_test, y_test_pred, labels=[2, 3], target_names=['croplands', 'non-croplands'])
+
+
+def evaluate_by_feature_importance(model, x_test, y_test, feature_names, pred_name):
+    PI_path = f'./preds/{pred_name}_PI.csv'
+    permutation_importance_table(model, x_test, y_test, feature_names, PI_path)
+    if isinstance(model, RandomForestClassifier()):
+        II_path = f'./preds/{pred_name}_II.csv'
+        impurity_importance_table(feature_names, model.feature_importances_, II_path)
+
+
+def evaluate_by_open_datasets(meta, region_shp_path, pred_name, label_only=True, work_station=False):
+    k_drive = '2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/'
+    ancilliary_path = '/home/lida/DFS/Projects/' + k_drive if work_station else 'K:/' + k_drive
+    pred_path = f'./preds/{pred_name}.tiff'
+    district = region_shp_path.split('/')[-2].split('_')[-1]
+    msgs = []
+
+    gfsad_args = {
+        'dataset': 'gfsad',
+        'raw_path': ancilliary_path + 'cropland/GFSAD30/GFSAD30SAAFGIRCE_2015_N30E70_001_2017286103800.tif',
+        'evaluate_func': evaluate_by_gfsad
+    }
+    copernicus_args = {
+        'dataset': 'copernicus',
+        'raw_path': ancilliary_path + 'landcover/Copernicus_LC100m/INDIA_2019/' + \
+                    'E060N40_PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif',
+        'evaluate_func': evaluate_by_copernicus
+    }
+
+    for ds in [gfsad_args, copernicus_args]:
+        dataset, raw_path, evaluate_func = ds['dataset'], ds['raw_path'], ds['evaluate_func']
+        out_path = f'./data/open_datasets/{dataset}_{district}.tiff'
+        print(f'Comparing {dataset.upper()} dataset with predictions...')
+        adjust_raster_size(raw_path, out_path, region_shp_path, meta, label_only)
+        msgs.append(evaluate_func(pred_path, out_path))
+    return msgs
+
+
+def get_model_and_params_dict_grid(model_name, random_state, testing, study_scaling):
+    if model_name == 'svc':
+        model = SVC()
+        if not testing:
+            params_dict = dict(
+                classification__C=[0.5, 1, 10, 100],
+                classification__gamma=['scale', 'auto'],
+                classification__kernel=['poly', 'rbf'],
+                classification__random_state=[random_state]
+            )
+        else:
+            params_dict = dict(
+                classification__C=[1],
+                classification__gamma=['scale'],
+                classification__kernel=['rbf'],
+                classification__random_state=[random_state]
+            )
+    elif model_name == 'rfc':
+        model = RandomForestClassifier()
+        if not testing:
+            params_dict = dict(
+                classification__n_estimators=[100, 300, 500],
+                classification__criterion=['gini', 'entropy'],
+                classification__max_depth=[5, 10, 15],
+                classification__max_samples=[0.5, 0.8, 1],
+                classification__random_state=[random_state]
+            )
+        else:
+            params_dict = dict(
+                classification__n_estimators=[100],
+                classification__criterion=['gini'],
+                classification__max_depth=[5],
+                classification__max_samples=[0.8],
+                classification__random_state=[random_state]
+            )
+    else:  # self.model_name == 'mlp':
+        model = MLPClassifier()
+        if not testing:
+            params_dict = dict(
+                classification__hidden_layer_sizes=[(100,), (300,), (300, 300)],
+                classification__alpha=[0.0001, 0.0005, 0.001, 0.005],
+                classification__max_iter=[200, 500],
+                classification__activation=['relu'],
+                classification__early_stopping=[True],
+                classification__random_state=[random_state]
+            )
+        else:
+            params_dict = dict(
+                classification__hidden_layer_sizes=[(100,)],
+                classification__alpha=[0.0001],
+                classification__max_iter=[200],
+                classification__activation=['relu'],
+                classification__early_stopping=[True],
+                classification__random_state=[random_state]
+            )
+    if study_scaling:
+        params_list = [
+            dict(params_dict.items() + {'scale_minmax': ['passthrough']}.items()),
+            dict(params_dict.items() + {'scale_std': ['passthrough']}.items())
+        ]
+    else:  # not study_scaling 
+        params_list = [params_dict]
+    return model, params_list
+
+
+def get_best_model_initial(model_name, best_params):
+    if model_name == 'svc':
+        best_model = SVC(
+            C=best_params['classification__C'],
+            gamma=best_params['classification__gamma'],
+            kernel=best_params['classification__kernel'],
+            random_state=best_params['classification__random_state']
         )
+    elif model_name == 'rfc':
+        best_model = RandomForestClassifier(
+            n_estimators=best_params['classification__n_estimators'],
+            criterion=best_params['classification__criterion'],
+            max_depth=best_params['classification__max_depth'],
+            max_samples=best_params['classification__max_samples'],
+            random_state=best_params['classification__random_state']
+        )
+    else:  # model_name == 'mlp':
+        best_model = MLPClassifier(
+            hidden_layer_sizes=best_params['classification__hidden_layer_sizes'],
+            alpha=best_params['classification__alpha'],
+            max_iter=best_params['classification__max_iter'],
+            activation=best_params['classification__activation'],
+            early_stopping=best_params['classification__early_stopping'],
+            random_state=best_params['classification__random_state']
+        )
+    return best_model
 
-    def evaluate_by_feature_importance(self, x_test, y_test, feature_names):
-        self._logger.info('Evaluating by feature importance...')
-        model_PI = f'./preds/{self.to_name}_PI.csv'
-        permutation_importance_table(self.model, x_test, y_test, feature_names, f'{model_PI}')
-        self._logger.info(f'  Saved permutation importance to {model_PI}')
-        if self.model_name == 'rfc':
-            model_II = f'./preds/{self.to_name}_II.csv'
-            impurity_importance_table(feature_names, self.model.feature_importances_, f'{model_II}')
-            self._logger.info(f'  Saved impurity importance to {model_II}')
 
-    def evaluate_by_open_datasets(self, region_shp_path, label_only=True, work_station=False):
-        self._logger.info('Evaluating by open datasets...')
-        k_drive = '2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/'
-        ancilliary_path = '/home/lida/DFS/Projects/' + k_drive if work_station else 'K:/' + k_drive
-        pred_path = f'./preds/{self.to_name}.tiff'
-        district = region_shp_path.split('/')[-2].split('_')[-1]
-
-        gfsad_args = {
-            'dataset': 'gfsad',
-            'raw_path': ancilliary_path + 'cropland/GFSAD30/GFSAD30SAAFGIRCE_2015_N30E70_001_2017286103800.tif',
-            'evaluate_func': evaluate_by_gfsad
-        }
-        copernicus_args = {
-            'dataset': 'copernicus',
-            'raw_path': ancilliary_path + 'landcover/Copernicus_LC100m/INDIA_2019/' + \
-                        'E060N40_PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif',
-            'evaluate_func': evaluate_by_copernicus
-        }
-
-        for ds in [gfsad_args, copernicus_args]:
-            dataset, raw_path, evaluate_func = ds['dataset'], ds['raw_path'], ds['evaluate_func']
-            out_path = f'./data/open_datasets/{dataset}_{district}.tiff'
-            self._logger.info(f'Comparing {dataset.upper()} dataset with predictions...')
-            # prepare_open_datasets(raw_path, out_path, pred_path, region_shp_path, label_only)
-            evaluate_func(pred_path, out_path, self._logger)
-
-    def test(self, x_test, y_test, meta, index, region_shp_path, feature_names=None, pred_name=None,
-             work_station=False):
-        self._logger.info("## Testing")
-        if pred_name is not None:
-            self.to_name = pred_name
-        # predict
-        y_test_pred = self.model.predict(x_test)
-        y_test_pred_converted = self.convert_partial_predictions(y_test_pred, index, meta)
-        self._save_predictions(meta, y_test_pred_converted)
-        # evaluate
-        self.evaluate_by_metrics(y_test, y_test_pred)
-        self.evaluate_by_open_datasets(region_shp_path, label_only=True, work_station=work_station)
-        if feature_names is not None:
-            self.evaluate_by_feature_importance(x_test, y_test, feature_names)
-
-    def predict(self, x, meta, region_shp_path, pred_name=None, work_station=False):
-        self._logger.info("## Predicting")
-        if pred_name is not None:
-            self.to_name = pred_name
-        y_pred = self.model.predict(x)
-        self._save_predictions(meta, y_pred)
-        self.evaluate_by_open_datasets(region_shp_path, label_only=False, work_station=work_station)
-
-    def load_pretrained_model(self, pretrained_name):
-        self._logger.info(f"Loading pretrained {pretrained_name}...")
-        self.model = pickle.load(open(pretrained_name, 'rb'))
-        self._logger.info('  ok')
-
-    def _get_model_base_and_params_list_grid(self, testing):
-        if self.model_name == 'svc':
-            model_base = SVC()
-            if not testing:
-                model_params_list = dict(
-                    C=[0.5, 1, 10, 100],
-                    gamma=['scale', 'auto'],
-                    kernel=['poly', 'rbf'],
-                    random_state=[self.random_state]
-                )
-            else:
-                model_params_list = dict(
-                    C=[1],
-                    gamma=['scale'],
-                    kernel=['rbf'],
-                    random_state=[self.random_state]
-                )
-        elif self.model_name == 'rfc':
-            model_base = RandomForestClassifier()
-            if not testing:
-                model_params_list = dict(
-                    n_estimators=[100, 300, 500],
-                    criterion=['gini', 'entropy'],
-                    max_depth=[5, 10, 15],
-                    max_samples=[0.5, 0.8, 1],
-                    random_state=[self.random_state]
-                )
-            else:
-                model_params_list = dict(
-                    n_estimators=[100],
-                    criterion=['gini'],
-                    max_depth=[5],
-                    max_samples=[0.8],
-                    random_state=[self.random_state]
-                )
-        else:  # self.model_name == 'mlp':
-            model_base = MLPClassifier()
-            if not testing:
-                model_params_list = dict(
-                    hidden_layer_sizes=[(100,), (300,), (300, 300)],
-                    alpha=[0.0001, 0.0005, 0.001, 0.005],
-                    max_iter=[200, 500],
-                    activation=['relu'],
-                    early_stopping=[True],
-                    random_state=[self.random_state]
-                )
-            else:
-                model_params_list = dict(
-                    hidden_layer_sizes=[(100,)],
-                    alpha=[0.0001],
-                    max_iter=[200],
-                    activation=['relu'],
-                    early_stopping=[True],
-                    random_state=[self.random_state]
-                )
-        self._logger.info(f'  model base {model_base}')
-        self._logger.info(f'  model parameters list {model_params_list}')
-        return model_base, model_params_list
-
-    def _get_model_base_and_params_list_random(self):
-        if self.model_name == 'svc':
-            model_base = SVC()
-            model_params_dist = dict(
-                C=loguniform(0.1, 100),
-                gamma=['scale', 'auto'],
-                kernel=['poly', 'rbf'],
-                random_state=[self.random_state]
-            )
-        elif self.model_name == 'rfc':
-            model_base = RandomForestClassifier()
-            model_params_dist = dict(
-                n_estimators=randint(100, 1000),
-                criterion=['gini', 'entropy'],
-                max_depth=randint(5, 15),
-                max_samples=uniform(0.5, 0.5),  # uniform(loc, scale) -> a=loc, b=loc+scale
-                random_state=[self.random_state]
-            )
-        else:  # self.model_name == 'mlp':
-            model_base = MLPClassifier()
-            model_params_dist = dict(
-                hidden_layer_sizes=[(100,), (300,)],
-                alpha=loguniform(0.0001, 0.001),
-                max_iter=randint(200, 500),
-                activation=['relu'],
-                early_stopping=[True],  # uniform(loc, scale) -> a=loc, b=loc+scale
-                random_state=[self.random_state]
-            )
-        self._logger.info(f'  model base {model_base}')
-        self._logger.info(f'  model parameters distribution {model_params_dist}')
-        return model_base, model_params_dist
-
-    def _get_best_model(self):
-        if self.model_name == 'svc':
-            model = SVC(
-                C=self.best_params['C'],
-                gamma=self.best_params['gamma'],
-                kernel=self.best_params['kernel'],
-                random_state=self.random_state
-            )
-        elif self.model_name == 'rfc':
-            model = RandomForestClassifier(
-                n_estimators=self.best_params['n_estimators'],
-                criterion=self.best_params['criterion'],
-                max_depth=self.best_params['max_depth'],
-                max_samples=self.best_params['max_samples'],
-                random_state=self.random_state
-            )
-        else:  # self.model_name == 'mlp':
-            model = MLPClassifier(
-                hidden_layer_sizes=self.best_params['hidden_layer_sizes'],
-                alpha=self.best_params['alpha'],
-                max_iter=self.best_params['max_iter'],
-                activation=self.best_params['activation'],
-                early_stopping=self.best_params['early_stopping'],
-                random_state=self.random_state
-            )
-        return model
+def get_pipeline(model, scaling, study_scaling=False, engineer_feature=None):
+    # decide pipeline structure
+    pipeline_list = []
+    if study_scaling:
+        pipeline_list.append(('scale_minmax', MinMaxScaler()))
+        pipeline_list.append(('scale_std', StandardScaler()))
+    else:
+        if scaling == 'standardize':
+            pipeline_list.append(('scale_std', StandardScaler()))
+        elif scaling == 'normalize':
+            pipeline_list.append(('scale_minmax', MinMaxScaler()))
+    if engineer_feature == 'select':
+        pipeline_list.append(('feature_selection', SelectKBest(f_classif, k=10)))
+    pipeline_list.append(('classification', model))
+    # build pipeline
+    pipe = Pipeline(pipeline_list)
+    return pipe
