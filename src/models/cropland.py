@@ -18,7 +18,7 @@ from src.evaluation.evaluate import adjust_raster_size
         
 
 def test(logger, model, x_test, y_test, meta, index, cat_mask, region_shp_path, 
-        pred_name, ancilliary_dir, color_by_height, feature_names=None):
+         pred_name, ancilliary_dir, color_by_height, feature_names=None):
     logger.info("## Testing")
     # predict
     y_test_pred = model.predict(x_test)
@@ -33,7 +33,7 @@ def test(logger, model, x_test, y_test, meta, index, cat_mask, region_shp_path,
     metrics = evaluate_by_metrics(y_test, y_test_pred)
     logger.info(f'\n{metrics}')
     logger.info('Evaluating by open datasets')
-    msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_name, ancilliary_dir, label_only=True)
+    msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_path, ancilliary_dir, label_only=True)
     for msg in msgs:
         logger.info(msg)
     if feature_names is not None:
@@ -42,17 +42,18 @@ def test(logger, model, x_test, y_test, meta, index, cat_mask, region_shp_path,
 
 
 def predict(logger, model, x, meta, cat_mask, region_shp_path, 
-            pred_name, ancilliary_dir, color_by_height):
+            pred_path, ancilliary_dir, color_by_height, eval_open=True):
     logger.info("## Predicting")
     y_pred = model.predict(x)
     # save prediction
-    pred_path = f'./preds/{pred_name}.tiff'
-    save_predictions_geotiff(y_pred, meta, pred_path, region_shp_path, cat_mask, color_by_height)
+    save_predictions_geotiff(y_pred, meta, save_path=pred_path, 
+        region_indicator=region_shp_path, cat_mask=cat_mask, color_by_height=color_by_height)
     logger.info(f'Saved predictions to {pred_path}')
     # evaluate 
-    msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_name, ancilliary_dir, label_only=False)
-    for msg in msgs:
-        logger.info(msg)
+    if eval_open:
+        msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_path, ancilliary_dir, label_only=False)
+        for msg in msgs:
+            logger.info(msg)
 
 
 def evaluate_by_metrics(y_test, y_test_pred):
@@ -63,14 +64,13 @@ def evaluate_by_metrics(y_test, y_test_pred):
 def evaluate_by_feature_importance(model, x_test, y_test, feature_names, pred_name):
     PI_path = f'./preds/{pred_name}_PI.csv'
     permutation_importance_table(model, x_test, y_test, feature_names, PI_path)
-    if isinstance(model, RandomForestClassifier()):
+    if 'RandomForest' in str(model['classification']):  # unsure if it works
         II_path = f'./preds/{pred_name}_II.csv'
         impurity_importance_table(feature_names, model.feature_importances_, II_path)
 
 
-def evaluate_by_open_datasets(meta, region_shp_path, pred_name, ancilliary_dir, label_only=True):
-    pred_path = f'./preds/{pred_name}.tiff'
-    district = region_shp_path.split('/')[-2].split('_')[-1]
+def evaluate_by_open_datasets(meta, region_indicator, pred_path, ancilliary_dir, label_only=True):
+    district = region_indicator.split('/')[-2].split('_')[-1] if isinstance(region_indicator, str) else None 
     msgs = []
 
     gfsad_args = {
@@ -89,7 +89,7 @@ def evaluate_by_open_datasets(meta, region_shp_path, pred_name, ancilliary_dir, 
         dataset, raw_path, evaluate_func = ds['dataset'], ds['raw_path'], ds['evaluate_func']
         out_path = f'./data/open_datasets/{dataset}_{district}.tiff'
         print(f'Comparing {dataset.upper()} dataset with predictions...')
-        adjust_raster_size(raw_path, out_path, region_shp_path, meta, label_only)
+        adjust_raster_size(raw_path, out_path, region_indicator=region_indicator, meta=meta, label_only=label_only)
         msgs.append(evaluate_func(pred_path, out_path))
     return msgs
 

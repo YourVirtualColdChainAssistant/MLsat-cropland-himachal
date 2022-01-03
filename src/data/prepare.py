@@ -105,7 +105,6 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
         meta.update(count=meta['count'] - 1 + len(new_bands_name))
     df = build_features(logger, bands_array, engineer_feature, bands_name=bands_name)
     feature_names = df.columns
-    # n_feature = feature_names.shape[0]
     logger.info(f'\nFeatures: {feature_names}')
     df['cat_mask'] = cat_pixel
 
@@ -272,7 +271,6 @@ def build_features(logger, bands_array, engineer_feature, bands_name):
         # difference of two successive timestamps
         df_list.append(get_difference(logger, bands_name[4:], n_weeks, bands_array[:, 4:, :]))
         if engineer_feature == 'select' or engineer_feature == 'temporal+spatial':
-            print(f'Entering spatial features... while engineer_feature={engineer_feature}')
             bands_array = bands_array.reshape(height, width, n_bands, n_weeks)
             df_list.append(get_all_spatial_features(logger, bands_name, bands_array))
         # concatenate

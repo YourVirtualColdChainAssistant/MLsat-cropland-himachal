@@ -20,6 +20,7 @@ model:
   smooth: False
   check_SAC: False
   models_name: ['rfc']
+  pretrained: ['0103-000750_rfc']
 predict:
   predict_train: False
   color_by_height: True

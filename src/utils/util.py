@@ -43,7 +43,7 @@ def save_predictions_geotiff(predictions, meta_src, save_path, region_indicator,
     if color_by_height:
         height_map_path = '../../../Data/layers_india/ancilliary_data/elevation/IND_alt.vrt'
         adjust_raster_size(height_map_path, './data/open_datasets/height_map.tiff',
-                           region_indicator, meta_src, label_only=False)
+                           region_indicator=region_indicator, meta=meta_src, label_only=False)
         with rasterio.open('./data/open_datasets/height_map.tiff') as f:
             height_map = f.read(1).reshape(-1)
         height_map[predictions != 2] = -9998
@@ -223,17 +223,27 @@ def resample(in_file, h_target, w_target):
         return data, transform
 
 
-def find_file_all_levels(string, search_path):
+def find_file(string, search_path):
     result = []
     # Walking top-down from the root
-    for root, dir_, files in os.walk(search_path):
+    for root, _, files in os.walk(search_path):
         for filename in files:
             if string in filename:
                 result.append(os.path.join(root, filename))
     return result
 
 
-def find_file_top_level(string, search_path):
+def find_folder(string, search_path):
+    result = []
+    # Walking top-down from the root
+    for root, dirs, _ in os.walk(search_path):
+        for d in dirs:
+            if string in d:
+                result.append(os.path.join(root, d))
+    return result
+
+
+def find_top_level(string, search_path):
     result = []
     for filename in os.listdir(search_path):
         if string in filename:
