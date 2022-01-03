@@ -5,7 +5,7 @@ import zipfile
 import argparse
 import rasterio
 import numpy as np
-from src.utils.util import resample, find_file_all_levels, find_file_top_level
+from src.utils.util import resample, find_file, find_folder, find_top_level
 import copy
 import multiprocessing
 
@@ -37,7 +37,7 @@ def process(args):
         if not os.path.exists(safe_dir):
             os.mkdir(safe_dir)
         # unzip_products(raw_dir, safe_dir, args.store_inter)
-        atmospheric_correction(sen2cor_path, safe_dir, corrected_dir, args.store_inter)  # absolute path to call sen2cor
+        # atmospheric_correction(sen2cor_path, safe_dir, corrected_dir, args.store_inter)  # absolute path to call sen2cor
     else:
         unzip_products(raw_dir, corrected_dir, args.store_inter)
     merge_to_raster(corrected_dir, geotiff_dir)
@@ -71,17 +71,18 @@ def atmospheric_correction(sen2cor_path, safe_dir, corrected_dir, store_inter):
 
 
 def is_corrected(file_dir_to_correct, corrected_dir):
-    name_L1C = os.listdir(file_dir_to_correct + '/GRANULE/')[0]
-    name_L2A = name_L1C.replace('L1C', 'L2A')
-    result = find_file_top_level(name_L1C, corrected_dir)
+    name_L2A = os.listdir(file_dir_to_correct + '/GRANULE/')[0].replace('L1C', 'L2A')
+    folders = find_top_level(name_L2A.split('_')[-1].split('T')[0], corrected_dir)
+    result = []
+    for folder in folders:
+        result = result + find_folder(name_L2A, folder)
     if len(result) == 0:
         return False
     elif len(result) == 1:
-        folder_L2A = result[0]
+        folder_in = result[0]
         corrected = False
-        if set(os.listdir(folder_L2A)) == {'AUX_DATA', 'GRANULE', 'DATASTRIP', 'rep_info', 'INSPIRE.xml',
-                                           'manifest.safe', 'MTD_MSIL2A.xml'}:
-            path_L2A = folder_L2A + '/GRANULE/' + name_L2A + '/IMG_DATA/'
+        if set(os.listdir(folder_in)) == {'IMG_DATA', 'MTD_TL.xml', 'QI_DATA', 'AUX_DATA'}:
+            path_L2A = folder_in + '/IMG_DATA/'
             if len(os.listdir(path_L2A)) == 3:
                 n_expected = [7, 13, 15]
                 all_exist = True
@@ -92,12 +93,14 @@ def is_corrected(file_dir_to_correct, corrected_dir):
                 if all_exist:
                     corrected = True
         if not corrected:
-            shutil.rmtree(folder_L2A)
-            print(f'Deleted {folder_L2A}')
+            folder_top = folder_in.split('GRANULE')[0]
+            shutil.rmtree(folder_top)
+            print(f'Deleted {folder_top}')
         return corrected
     else:
-        for folder_L2A in result:
-            shutil.rmtree(folder_L2A)
+        for folder_in in result:
+            folder_top = folder_in.split('GRANULE')[0]
+            shutil.rmtree(folder_top)
         print(f'Deleted {result}')
         return False
 
@@ -116,7 +119,7 @@ def merge_to_raster(corrected_dir, geotiff_dir):
         file_name = os.listdir(in_dir)[0]
         in_path = in_dir + file_name + '/IMG_DATA/R10m/*_B*.jp2'
         out_path = geotiff_dir + file_name + '.tiff'
-        cloud_path = find_file_all_levels('SCL_60m.jp2', in_dir)
+        cloud_path = find_file('SCL_60m.jp2', in_dir)
         convert_jp2_to_tiff(in_path, out_path, cloud_path, crs)
         print(f'[{i}/{len(file_paths)}] merged {out_path}')
     print('Merge done!')
@@ -176,7 +179,7 @@ def convert_jp2_to_tiff(in_path, out_path, cloud_path, crs):
 def get_crs_from_SCL(corrected_dir):
     corrected_names = os.listdir(corrected_dir)
     for corrected_name in corrected_names:
-        file = find_file_all_levels('SCL_60m.jp2', corrected_dir + corrected_name)
+        file = find_file('SCL_60m.jp2', corrected_dir + corrected_name)
         if len(file) == 1:
             data = rasterio.open(file[0])
             return data.crs
@@ -186,10 +189,10 @@ def get_crs_from_SCL(corrected_dir):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--work_station', type=bool, default=False)
+    parser.add_argument('--work_station', type=bool, default=True)
     parser.add_argument('--store_inter', default=True, action='store_false',
                         help='Store the intermediate files (raw and L1C) or not.')
-    parser.add_argument('--tile_ids', nargs="+", default=['43SES'])
+    parser.add_argument('--tile_ids', nargs="+", default=['43RGQ'])
     args = parser.parse_args()
 
     args_list, tile_ids = [], args.tile_ids
