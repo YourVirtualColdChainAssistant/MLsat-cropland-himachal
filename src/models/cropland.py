@@ -18,7 +18,7 @@ from src.evaluation.evaluate import adjust_raster_size
         
 
 def test(logger, model, x_test, y_test, meta, index, cat_mask, region_shp_path, 
-        pred_name, color_by_height, feature_names=None, work_station=False):
+        pred_name, ancilliary_dir, color_by_height, feature_names=None):
     logger.info("## Testing")
     # predict
     y_test_pred = model.predict(x_test)
@@ -33,7 +33,7 @@ def test(logger, model, x_test, y_test, meta, index, cat_mask, region_shp_path,
     metrics = evaluate_by_metrics(y_test, y_test_pred)
     logger.info(f'\n{metrics}')
     logger.info('Evaluating by open datasets')
-    msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_name, label_only=True, work_station=work_station)
+    msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_name, ancilliary_dir, label_only=True)
     for msg in msgs:
         logger.info(msg)
     if feature_names is not None:
@@ -42,7 +42,7 @@ def test(logger, model, x_test, y_test, meta, index, cat_mask, region_shp_path,
 
 
 def predict(logger, model, x, meta, cat_mask, region_shp_path, 
-            pred_name, color_by_height, work_station=False):
+            pred_name, ancilliary_dir, color_by_height):
     logger.info("## Predicting")
     y_pred = model.predict(x)
     # save prediction
@@ -50,7 +50,7 @@ def predict(logger, model, x, meta, cat_mask, region_shp_path,
     save_predictions_geotiff(y_pred, meta, pred_path, region_shp_path, cat_mask, color_by_height)
     logger.info(f'Saved predictions to {pred_path}')
     # evaluate 
-    msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_name, label_only=False, work_station=work_station)
+    msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_name, ancilliary_dir, label_only=False)
     for msg in msgs:
         logger.info(msg)
 
@@ -68,21 +68,19 @@ def evaluate_by_feature_importance(model, x_test, y_test, feature_names, pred_na
         impurity_importance_table(feature_names, model.feature_importances_, II_path)
 
 
-def evaluate_by_open_datasets(meta, region_shp_path, pred_name, label_only=True, work_station=False):
-    k_drive = '2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/'
-    ancilliary_path = '/home/lida/DFS/Projects/' + k_drive if work_station else 'K:/' + k_drive
+def evaluate_by_open_datasets(meta, region_shp_path, pred_name, ancilliary_dir, label_only=True):
     pred_path = f'./preds/{pred_name}.tiff'
     district = region_shp_path.split('/')[-2].split('_')[-1]
     msgs = []
 
     gfsad_args = {
         'dataset': 'gfsad',
-        'raw_path': ancilliary_path + 'cropland/GFSAD30/GFSAD30SAAFGIRCE_2015_N30E70_001_2017286103800.tif',
+        'raw_path': ancilliary_dir + 'cropland/GFSAD30/GFSAD30SAAFGIRCE_2015_N30E70_001_2017286103800.tif',
         'evaluate_func': evaluate_by_gfsad
     }
     copernicus_args = {
         'dataset': 'copernicus',
-        'raw_path': ancilliary_path + 'landcover/Copernicus_LC100m/INDIA_2019/' + \
+        'raw_path': ancilliary_dir + 'landcover/Copernicus_LC100m/INDIA_2019/' + \
                     'E060N40_PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif',
         'evaluate_func': evaluate_by_copernicus
     }
@@ -152,11 +150,12 @@ def get_model_and_params_dict_grid(model_name, random_state, testing, study_scal
                 classification__random_state=[random_state]
             )
     if study_scaling:
-        params_list = [
-            dict(params_dict.items() + {'scale_minmax': ['passthrough']}.items()),
-            dict(params_dict.items() + {'scale_std': ['passthrough']}.items())
-        ]
+        p1 = params_dict.copy().update({'scale_minmax': ['passthrough'], 'feature_selection__k': [75, 100, 150, 200, 300, 400]})
+        p2 = params_dict.copy().update({'scale_std': ['passthrough'], 'feature_selection__k': [75, 100, 150, 200, 300, 400]})
+        params_list = [p1, p2]
     else:  # not study_scaling 
+        params_dict.update({'feature_selection__k': [75, 100, 150, 200, 300, 400]})
+        # params_dict.update({'feature_selection__k': [1]})
         params_list = [params_dict]
     return model, params_list
 
@@ -189,7 +188,7 @@ def get_best_model_initial(model_name, best_params):
     return best_model
 
 
-def get_pipeline(model, scaling, study_scaling=False, engineer_feature=None):
+def get_pipeline(model, scaling, study_scaling=False, engineer_feature=None, k_feature=10):
     # decide pipeline structure
     pipeline_list = []
     if study_scaling:
@@ -201,7 +200,7 @@ def get_pipeline(model, scaling, study_scaling=False, engineer_feature=None):
         elif scaling == 'normalize':
             pipeline_list.append(('scale_minmax', MinMaxScaler()))
     if engineer_feature == 'select':
-        pipeline_list.append(('feature_selection', SelectKBest(f_classif, k=10)))
+        pipeline_list.append(('feature_selection', SelectKBest(f_classif, k=k_feature)))
     pipeline_list.append(('classification', model))
     # build pipeline
     pipe = Pipeline(pipeline_list)

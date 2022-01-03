@@ -139,28 +139,10 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
                 plot_profile(data=b_arr.reshape(-1, len(timestamps_weekly_ref)),
                              label=df.label.values, timestamps=timestamps_weekly_ref,
                              veg_index=b, title=name.replace('_', ' '), save_path=f"../figs/{name}.png")
-
-        # # get valid and whole
-        # if task == 'cropland':
-        #     df_valid, x_valid, y_valid = \
-        #         get_valid_cropland_x_y(logger, df=df, n_feature=n_feature, dataset=dataset)
-        # elif task == 'crop':
-        #     df_valid, x_valid, y_valid = \
-        #         get_valid_crop_x_y(logger, df=df, n_feature=n_feature, dataset=dataset)
-        # else:
-        #     raise ValueError(f'No task {task}! Choose from [cropland, crop].')
-
-    
         logger.info('ok')
-
         return df, meta, feature_names, polygons_list, val_list
-
-    else:  # 'predict' in dataset
-        # get x
-        # x = df.iloc[:, :n_feature].values
-
+    else:  
         logger.info('ok')
-
         return df, meta, feature_names
 
 

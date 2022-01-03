@@ -1,0 +1,26 @@
+data:
+  img_dir: /mnt/N/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/
+  ancilliary_dir: /home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/
+train:
+  cv_type:  block
+  tiles_x: 4
+  tiles_y: 4
+  shape: square
+  buffer_radius: 0
+  n_fold: 3
+  random_state: 24
+  hp_search_by: grid
+model:
+  fill_missing: linear
+  check_missing: False
+  scaling: as_reflectance
+  study_scaling: False
+  engineer_feature: select
+  new_bands_name: ['ndvi']
+  smooth: False
+  check_SAC: False
+  models_name: ['rfc']
+predict:
+  predict_train: False
+  color_by_height: True
+  
