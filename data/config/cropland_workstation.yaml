@@ -15,13 +15,13 @@ model:
   check_missing: False
   scaling: as_reflectance
   study_scaling: False
-  engineer_feature: select
+  engineer_feature: temporal+spatial
   new_bands_name: ['ndvi']
   smooth: False
   check_SAC: False
-  models_name: ['rfc']
+  models_name: ['svc', 'rfc', 'mlp']
   pretrained: ['0103-000750_rfc']
 predict:
-  predict_train: False
+  predict_train: True
   color_by_height: True
   

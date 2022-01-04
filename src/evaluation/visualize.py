@@ -147,7 +147,7 @@ def plot_timestamps(timestamps, title=None, save_path=None):
     plt.close()
 
 
-def plot_profile(data, label, timestamps, veg_index, title=None, save_path=None):
+def plot_profile(data, label, timestamps, veg_index, type='all', title=None, save_path=None):
     """
     Plot NDVI / GNDVI / ... profile of classes as time evolving.
 
@@ -174,25 +174,46 @@ def plot_profile(data, label, timestamps, veg_index, title=None, save_path=None)
     unique_label = np.unique(label)
     veg_index = veg_index.upper()
     colors_map = {0: 'black', 1: 'tab:red', 2: 'tab:green', 3: 'tab:brown'}
-    labels_map = {0: 'unlabeled', 1: 'apples', 2: 'other croplands', 3: 'non-croplands'}
+    labels_all_map = {0: 'unlabeled', 1: 'apples', 2: 'other croplands', 3: 'non-croplands'}
+    labels_cropland_map = {2: 'croplands', 3: 'non-croplands'}
+    labels_apple_map = {1: 'apples', 2: 'others'}
 
     df = pd.DataFrame()
-    for l in unique_label:
-        mean = data[label == l].mean(axis=0)
-        std = data[label == l].std(axis=0)
-        plt.plot(timestamps, mean, color=colors_map[l], label=labels_map[l])
-        plt.fill_between(timestamps, mean - std, mean + std, color=colors_map[l], alpha=0.2)
-        df['mean_' + str(l)] = mean
-        df['std_' + str(l)] = std
+    if type == 'all':
+        for l in unique_label:
+            mean = data[label == l].mean(axis=0)
+            std = data[label == l].std(axis=0)
+            plt.plot(timestamps, mean, color=colors_map[l], label=labels_all_map[l])
+            plt.fill_between(timestamps, mean - std, mean + std, color=colors_map[l], alpha=0.2)
+            df['mean_' + str(l)] = mean
+            df['std_' + str(l)] = std
+    elif type == 'cropland':
+        mean_cropland = data[(label == 1) | (label == 2)].mean(axis=0)
+        std_cropland = data[(label == 1) | (label == 2)].std(axis=0)
+        plt.plot(timestamps, mean_cropland, color='tab:green', label=labels_cropland_map[2])
+        plt.fill_between(timestamps, mean_cropland - std_cropland, mean_cropland + std_cropland, color='tab:green', alpha=0.2)
+        mean_non_crop = data[label == 3].mean(axis=0)
+        std_non_crop = data[label == 3].std(axis=0)
+        plt.plot(timestamps, mean_non_crop, color='tab:brown', label=labels_cropland_map[2])
+        plt.fill_between(timestamps, mean_non_crop - std_non_crop, mean_non_crop + std_non_crop, color='tab:brown', alpha=0.2)
+    elif type == 'apple':
+        mean_apple = data[label == 1].mean(axis=0)
+        std_apple= data[label == 1].std(axis=0)
+        plt.plot(timestamps, mean_apple, color='tab:red', label=labels_cropland_map[2])
+        plt.fill_between(timestamps, mean_apple - std_apple, mean_apple + std_apple, color='tab:red', alpha=0.2)
+        mean_others = data[label == 2].mean(axis=0)
+        std_others = data[label == 2].std(axis=0)
+        plt.plot(timestamps, mean_others, color='tab:green', label=labels_cropland_map[2])
+        plt.fill_between(timestamps, mean_others - std_others, mean_others + std_others, color='tab:green', alpha=0.2)
     plt.legend(loc='best')
     plt.ylim(0, 1)
     plt.xlabel('Time')
     plt.ylabel(veg_index)
     if title is not None:
         plt.title(title)
-        df.to_csv(f'./figs/{title}.csv', index=False)
+        df.to_csv(f'./figs/{title}_{type}.csv', index=False)
     else:
-        df.to_csv(f'./figs/{veg_index}_profile.csv', index=False)
+        df.to_csv(f'./figs/{veg_index}_profile_{type}.csv', index=False)
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
         print(f'Saved {veg_index} profile to {save_path}')

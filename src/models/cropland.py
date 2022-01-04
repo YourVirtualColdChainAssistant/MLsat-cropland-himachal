@@ -10,7 +10,6 @@ from src.evaluation.evaluate import evaluate_by_gfsad, evaluate_by_copernicus, \
 
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.feature_selection import SequentialFeatureSelector
 from sklearn.feature_selection import SelectKBest, f_classif
 from src.models.base_model import convert_partial_predictions
 from src.utils.util import save_predictions_geotiff
@@ -94,7 +93,7 @@ def evaluate_by_open_datasets(meta, region_indicator, pred_path, ancilliary_dir,
     return msgs
 
 
-def get_model_and_params_dict_grid(model_name, random_state, testing, study_scaling):
+def get_model_and_params_dict_grid(model_name, random_state, testing, study_scaling, engineer_feature):
     if model_name == 'svc':
         model = SVC()
         if not testing:
@@ -149,13 +148,18 @@ def get_model_and_params_dict_grid(model_name, random_state, testing, study_scal
                 classification__early_stopping=[True],
                 classification__random_state=[random_state]
             )
-    if study_scaling:
+    if study_scaling and engineer_feature == 'select':
         p1 = params_dict.copy().update({'scale_minmax': ['passthrough'], 'feature_selection__k': [75, 100, 150, 200, 300, 400]})
         p2 = params_dict.copy().update({'scale_std': ['passthrough'], 'feature_selection__k': [75, 100, 150, 200, 300, 400]})
         params_list = [p1, p2]
-    else:  # not study_scaling 
+    elif study_scaling and engineer_feature != 'select':
+        p1 = params_dict.copy().update({'scale_minmax': ['passthrough']})
+        p2 = params_dict.copy().update({'scale_std': ['passthrough']})
+        params_list = [p1, p2]
+    elif not study_scaling and engineer_feature == 'select':
         params_dict.update({'feature_selection__k': [75, 100, 150, 200, 300, 400]})
-        # params_dict.update({'feature_selection__k': [1]})
+        params_list = [params_dict]
+    else:  # not study_scaling and engineer_feature != 'select':
         params_list = [params_dict]
     return model, params_list
 

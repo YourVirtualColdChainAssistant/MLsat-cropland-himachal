@@ -95,8 +95,8 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
         bands_array = smooth_raw_bands(bands_array)
     if vis_stack:
         logger.info('# Visualize timestamp stacking')
-        plot_timestamps(timestamps_raw, None, f'../figs/timestamps_raw_{dataset}.png')
-        plot_timestamps(timestamps_weekly_ref, None, f'../figs/timestamps_{way}_{dataset}.png')
+        plot_timestamps(timestamps_raw, None, f'./figs/timestamps_raw_{dataset}.png')
+        plot_timestamps(timestamps_weekly_ref, None, f'./figs/timestamps_{way}_{dataset}.png')
 
     logger.info('# Build features')
     if new_bands_name:
@@ -125,19 +125,20 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
         # visualize profile weekly
         if vis_profile:
             for b in new_bands_name:
+                type = 'cropland'
                 b_arr = bands_array[:, :, bands_name.index(b), :]
                 if smooth:
-                    name = f"{b.upper()}_smoothed_{way}_profile_{dataset}"
+                    name = f"{b.upper()}_smoothed_{way}_profile_{dataset}_{type}"
                 else:
-                    name = f"{b.upper()}_{way}_profile_{dataset}"
-                    name_s = f"{b.upper()}_smoothed_{way}_profile_{dataset}"
+                    name = f"{b.upper()}_{way}_profile_{dataset}_cropland"
+                    name_s = f"{b.upper()}_smoothed_{way}_profile_{dataset}_{type}"
                     b_arr_smoothed = smooth_raw_bands(np.expand_dims(b_arr.copy(), axis=2))
                     plot_profile(data=b_arr_smoothed.reshape(-1, len(timestamps_weekly_ref)),
-                                 label=df.label.values, timestamps=timestamps_weekly_ref,
-                                 veg_index=b, title=name_s.replace('_', ' '), save_path=f"../figs/{name_s}.png")
+                                 label=df.label.values, timestamps=timestamps_weekly_ref, type=type,
+                                 veg_index=b, title=name_s.replace('_', ' '), save_path=f"./figs/{name_s}.png")
                 plot_profile(data=b_arr.reshape(-1, len(timestamps_weekly_ref)),
-                             label=df.label.values, timestamps=timestamps_weekly_ref,
-                             veg_index=b, title=name.replace('_', ' '), save_path=f"../figs/{name}.png")
+                             label=df.label.values, timestamps=timestamps_weekly_ref, type=type,
+                             veg_index=b, title=name.replace('_', ' '), save_path=f"./figs/{name}.png")
         logger.info('ok')
         return df, meta, feature_names, polygons_list, val_list
     else:  

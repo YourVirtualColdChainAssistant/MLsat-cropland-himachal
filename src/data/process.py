@@ -36,8 +36,8 @@ def process(args):
         safe_dir = tile_dir + 'L1C/'
         if not os.path.exists(safe_dir):
             os.mkdir(safe_dir)
-        # unzip_products(raw_dir, safe_dir, args.store_inter)
-        # atmospheric_correction(sen2cor_path, safe_dir, corrected_dir, args.store_inter)  # absolute path to call sen2cor
+        unzip_products(raw_dir, safe_dir, args.store_inter)
+        atmospheric_correction(sen2cor_path, safe_dir, corrected_dir, args.store_inter)  # absolute path to call sen2cor
     else:
         unzip_products(raw_dir, corrected_dir, args.store_inter)
     merge_to_raster(corrected_dir, geotiff_dir)
@@ -189,10 +189,10 @@ def get_crs_from_SCL(corrected_dir):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--work_station', type=bool, default=True)
+    parser.add_argument('--work_station', type=bool, default=False)
     parser.add_argument('--store_inter', default=True, action='store_false',
                         help='Store the intermediate files (raw and L1C) or not.')
-    parser.add_argument('--tile_ids', nargs="+", default=['43RGQ'])
+    parser.add_argument('--tile_ids', nargs="+", default=['43RGP'])
     args = parser.parse_args()
 
     args_list, tile_ids = [], args.tile_ids

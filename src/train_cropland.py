@@ -115,7 +115,7 @@ def cropland_classification(args):
         # grid search
         if cv_type:
             # get model and parameters
-            model, params_grid = get_model_and_params_dict_grid(model_name, random_state, testing, study_scaling)
+            model, params_grid = get_model_and_params_dict_grid(model_name, random_state, testing, study_scaling, engineer_feature)
             logger.info(f'Grid parameters dict {params_grid}')
             if cv_type == 'block' or cv_type == 'spatial':
                 cv = scv.split(coords_train_val)
