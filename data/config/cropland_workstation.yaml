@@ -20,7 +20,7 @@ model:
   smooth: False
   check_SAC: False
   models_name: ['svc', 'rfc', 'mlp']
-  pretrained: ['0103-000750_rfc']
+  pretrained: ['20220105-135132_rfc', '20220105-135132_svc', '20220105-135132_mlp']
 predict:
   predict_train: True
   color_by_height: True

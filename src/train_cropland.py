@@ -148,7 +148,7 @@ def cropland_classification(args):
             x = df_tv.loc[:, feature_names]
             predict(logger, best_estimator, x, meta, cat_mask=cat_mask,
                     region_shp_path='./data/train_region/train_region.shp', color_by_height=color_by_height, 
-                    pred_name=f'{log_time}_{model_name}', ancilliary_dir=ancilliary_dir)
+                    pred_path=f'./preds/{log_time}_{model_name}.tiff', ancilliary_dir=ancilliary_dir)
     if check_SAC:
         # TODO: draw more pairs below 5km, see the values of auto-correlation
         # TODO: how many pixels are we moving if use buffer_radius=3km as suggested in the semi-variogram

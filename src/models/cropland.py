@@ -37,7 +37,7 @@ def test(logger, model, x_test, y_test, meta, index, cat_mask, region_shp_path,
         logger.info(msg)
     if feature_names is not None:
         logger.info('Evaluating by feature importance...')
-        evaluate_by_feature_importance(model, x_test, y_test, feature_names, pred_name)
+        evaluate_by_feature_importance(model['classification'], x_test, y_test, feature_names, pred_name)
 
 
 def predict(logger, model, x, meta, cat_mask, region_shp_path, 
@@ -63,7 +63,7 @@ def evaluate_by_metrics(y_test, y_test_pred):
 def evaluate_by_feature_importance(model, x_test, y_test, feature_names, pred_name):
     PI_path = f'./preds/{pred_name}_PI.csv'
     permutation_importance_table(model, x_test, y_test, feature_names, PI_path)
-    if 'RandomForest' in str(model['classification']):  # unsure if it works
+    if 'RandomForest' in str(model):  # unsure if it works
         II_path = f'./preds/{pred_name}_II.csv'
         impurity_importance_table(feature_names, model.feature_importances_, II_path)
 
