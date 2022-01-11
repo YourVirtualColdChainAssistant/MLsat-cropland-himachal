@@ -42,14 +42,14 @@ def load_geotiff(path, window=None, read_as='as_integer'):
     return band, meta
 
 
-def clean_train_shapefiles(save_to_path='./data/train_labels/train_labels.shp'):
+def clean_train_shapefiles(save_to_path='./data/ground_truth/train_labels/train_labels.shp'):
     # read all the shape files
     print(os.path.abspath(os.getcwd()))
-    old_apples_shp = gpd.read_file('./data/apples/survey20210716_polygons20210819_corrected20210831.shp')
-    new_apples_shp = gpd.read_file('./data/apples/survey20210825_polygons20210901_revised20210929.shp')
-    non_crops_shp = gpd.read_file('./data/non_crops/non_crops.shp')
-    other_crops_shp = gpd.read_file('./data/other_crops/other_crops.shp')
-    train_region_shp = gpd.read_file('./data/train_region/train_region.shp')
+    old_apples_shp = gpd.read_file('./data/ground_truth/apples/survey20210716_polygons20210819_corrected20210831.shp')
+    new_apples_shp = gpd.read_file('./data/ground_truth/apples/survey20210825_polygons20210901_revised20210929.shp')
+    non_crops_shp = gpd.read_file('./data/ground_truth/non_crops/non_crops.shp')
+    other_crops_shp = gpd.read_file('./data/ground_truth/other_crops/other_crops.shp')
+    train_region_shp = gpd.read_file('./data/ground_truth/train_region/train_region.shp')
     # put all shape files into one geo dataframe
     label_shp = gpd.GeoDataFrame(
         pd.concat([old_apples_shp, new_apples_shp, other_crops_shp, non_crops_shp], axis=0))
@@ -69,9 +69,9 @@ def clean_test_shapefiles():
     clean_test_far_shapefiles()
 
 
-def clean_test_near_shapefiles(save_to_path='./data/test_labels_kullu/test_labels_kullu.shp'):
-    label_shp = gpd.read_file('./data/test_polygons_near/test_polygons_near.shp')
-    test_region_shp = gpd.read_file('./data/test_region_near/test_region_near.shp')
+def clean_test_near_shapefiles(save_to_path='./data/ground_truth/test_labels_kullu/test_labels_kullu.shp'):
+    label_shp = gpd.read_file('./data/ground_truth/test_polygons_near/test_polygons_near.shp')
+    test_region_shp = gpd.read_file('./data/ground_truth/test_region_near/test_region_near.shp')
     # delete empty polygons and split multipolygons
     label_shp = label_shp.dropna().reset_index(drop=True)
     label_shp = multipolygons_to_polygons(label_shp)
@@ -80,9 +80,10 @@ def clean_test_near_shapefiles(save_to_path='./data/test_labels_kullu/test_label
 
 
 def clean_test_far_shapefiles():
-    old_apples_shp = gpd.read_file('./data/apples/survey20210716_polygons20210819_corrected20210831.shp')
-    new_apples_shp = gpd.read_file('./data/apples/survey20210825_polygons20210901_revised20210929.shp')
-    far_shp = gpd.read_file('./data/test_polygons_far/test_polygons_far.shp')  # include other crops and non-cropland
+    old_apples_shp = gpd.read_file('./data/ground_truth/apples/survey20210716_polygons20210819_corrected20210831.shp')
+    new_apples_shp = gpd.read_file('./data/ground_truth/apples/survey20210825_polygons20210901_revised20210929.shp')
+    # include other crops and non-cropland
+    far_shp = gpd.read_file('./data/ground_truth/test_polygons_far/test_polygons_far.shp')
     label_shp = gpd.GeoDataFrame(
         pd.concat([old_apples_shp, new_apples_shp, far_shp], axis=0))
     if old_apples_shp.crs == new_apples_shp.crs == far_shp.crs:
@@ -93,8 +94,8 @@ def clean_test_far_shapefiles():
     label_shp = label_shp.dropna().reset_index(drop=True)
     label_shp = multipolygons_to_polygons(label_shp)
     # check whether the dir exists
-    mandi_path = './data/test_labels_mandi/test_labels_mandi.shp'
-    shimla_path = './data/test_labels_shimla/test_labels_shimla.shp'
+    mandi_path = './data/ground_truth/test_labels_mandi/test_labels_mandi.shp'
+    shimla_path = './data/ground_truth/test_labels_shimla/test_labels_shimla.shp'
     if not os.path.exists(mandi_path.rstrip(mandi_path.split('/')[-1])):
         os.makedirs(mandi_path.rstrip(mandi_path.split('/')[-1]))
     if not os.path.exists(shimla_path.rstrip(shimla_path.split('/')[-1])):

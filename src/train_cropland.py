@@ -67,7 +67,7 @@ def cropland_classification(args):
     # prepare train and validation dataset
     df_tv, meta, feature_names, polygons, _ = \
         prepare_data(logger=logger, dataset='train_val', feature_dir=feature_dir, window=None,
-                     label_path='./data/train_labels/train_labels.shp', smooth=smooth,
+                     label_path='./data/ground_truth/train_labels/train_labels.shp', smooth=smooth,
                      engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
                      fill_missing=fill_missing, check_missing=check_missing,
                      vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='cropland')
@@ -147,12 +147,13 @@ def cropland_classification(args):
         # predict and evaluation
         test(logger, best_estimator, x_train_val, y_train_val, meta, df_train_val.index, cat_mask=cat_mask,
              pred_name=f'{log_time}_{model_name}_labels', ancillary_dir=ancillary_dir, feature_names=None,
-             region_indicator='./data/train_labels/train_labels.shp', color_by_height=color_by_height)
+             region_indicator='./data/ground_truth/train_labels/train_labels.shp', color_by_height=color_by_height)
         if not predict_labels_only:
             x = df_tv.loc[:, feature_names]
             predict(logger, best_estimator, x, meta, cat_mask=cat_mask,
                     pred_path=f'./preds/{log_time}_{model_name}.tiff', ancillary_dir=ancillary_dir,
-                    region_indicator='./data/train_region/train_region.shp', color_by_height=color_by_height)
+                    region_indicator='./data/ground_truth/train_region/train_region.shp',
+                    color_by_height=color_by_height)
 
     if check_SAC:
         # TODO: draw more pairs below 5km, see the values of auto-correlation
