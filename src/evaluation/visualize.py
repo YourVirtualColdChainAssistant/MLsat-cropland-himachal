@@ -1,5 +1,3 @@
-import os
-import re
 import itertools
 import numpy as np
 import matplotlib as mpl
@@ -8,7 +6,6 @@ import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 import rasterio
 import shapely
-import pyproj
 import pandas as pd
 import datetime
 
@@ -69,7 +66,7 @@ def get_mycmap(num_colors, cmap='Set1'):
         mycmap.set_bad(color='black')
         return mycmap
     else:
-        return 'Set too many colors'
+        raise ValueError('Set too many colors')
 
 
 def map_values_to_colors(values, mycmap):
@@ -161,6 +158,7 @@ def plot_profile(data, label, timestamps, veg_index, type='all', title=None, sav
         A list of dates (of each Monday in 2020).
     veg_index: string
         The name of the vegetation index to be drew.
+    type: choices = [all, cropland, apple]
     title: string
         Name of plot.
     save_path: string
@@ -188,23 +186,33 @@ def plot_profile(data, label, timestamps, veg_index, type='all', title=None, sav
             df['mean_' + str(l)] = mean
             df['std_' + str(l)] = std
     elif type == 'cropland':
+        # cropland
         mean_cropland = data[(label == 1) | (label == 2)].mean(axis=0)
         std_cropland = data[(label == 1) | (label == 2)].std(axis=0)
         plt.plot(timestamps, mean_cropland, color='tab:green', label=labels_cropland_map[2])
-        plt.fill_between(timestamps, mean_cropland - std_cropland, mean_cropland + std_cropland, color='tab:green', alpha=0.2)
+        plt.fill_between(timestamps, mean_cropland - std_cropland,
+                         mean_cropland + std_cropland, color='tab:green', alpha=0.2)
+        # non-cropland
         mean_non_crop = data[label == 3].mean(axis=0)
         std_non_crop = data[label == 3].std(axis=0)
         plt.plot(timestamps, mean_non_crop, color='tab:brown', label=labels_cropland_map[3])
-        plt.fill_between(timestamps, mean_non_crop - std_non_crop, mean_non_crop + std_non_crop, color='tab:brown', alpha=0.2)
+        plt.fill_between(timestamps, mean_non_crop - std_non_crop,
+                         mean_non_crop + std_non_crop, color='tab:brown', alpha=0.2)
     elif type == 'apple':
+        # apple
         mean_apple = data[label == 1].mean(axis=0)
-        std_apple= data[label == 1].std(axis=0)
+        std_apple = data[label == 1].std(axis=0)
         plt.plot(timestamps, mean_apple, color='tab:red', label=labels_cropland_map[1])
-        plt.fill_between(timestamps, mean_apple - std_apple, mean_apple + std_apple, color='tab:red', alpha=0.2)
+        plt.fill_between(timestamps, mean_apple - std_apple,
+                         mean_apple + std_apple, color='tab:red', alpha=0.2)
+        # others
         mean_others = data[label == 2].mean(axis=0)
         std_others = data[label == 2].std(axis=0)
         plt.plot(timestamps, mean_others, color='tab:green', label=labels_cropland_map[2])
-        plt.fill_between(timestamps, mean_others - std_others, mean_others + std_others, color='tab:green', alpha=0.2)
+        plt.fill_between(timestamps, mean_others - std_others,
+                         mean_others + std_others, color='tab:green', alpha=0.2)
+    else:
+        raise ValueError(f'No such {type} plot available. Choose from [all, cropland, apple].')
     plt.legend(loc='best')
     plt.ylim(0, 1)
     plt.xlabel('Time')

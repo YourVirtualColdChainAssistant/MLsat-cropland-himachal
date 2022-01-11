@@ -1,21 +1,22 @@
 import sys
 import os
-import argparse
+import yaml
+import pickle
 import datetime
-import skgstat as skg
+import argparse
 import numpy as np
 import geopandas as gpd
-
-from src.data.prepare import prepare_data, construct_grid_to_fold, clean_train_shapefiles, get_valid_cropland_x_y
-from src.utils.logger import get_log_dir, get_logger
-from src.utils.scv import ModifiedBlockCV, ModifiedSKCV
-from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
-
-from src.models.cropland import get_model_and_params_dict_grid, get_best_model_initial, get_pipeline, test, predict
+import skgstat as skg
 from sklearn.model_selection import GridSearchCV
+
+from src.data.load import clean_train_shapefiles
+from src.data.prepare import prepare_data, get_valid_cropland_x_y
+from src.utils.logger import get_log_dir, get_logger
 from src.utils.util import save_cv_results
-import pickle
-import yaml
+from src.utils.scv import ModifiedBlockCV, ModifiedSKCV, construct_grid_to_fold
+from src.models.util import get_pipeline, get_addtional_params
+from src.models.cropland import get_model_and_params_dict_grid, get_best_model_initial, test, predict
+from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 
 def cropland_classification(args):
@@ -28,7 +29,7 @@ def cropland_classification(args):
     predict_kwargs = config.get('predict')
     # data path kwargs
     img_dir = data_kwargs.get('img_dir')
-    ancilliary_dir = data_kwargs.get('ancilliary_dir')
+    ancillary_dir = data_kwargs.get('ancillary_dir')
     # train kwargs 
     cv_type = train_kwargs.get('cv_type')
     tiles_x = train_kwargs.get('tiles_x')
@@ -49,7 +50,7 @@ def cropland_classification(args):
     check_SAC = model_kwargs.get('check_SAC')
     models_name = model_kwargs.get('models_name')
     # predict kwargs
-    predict_train = predict_kwargs.get('predict_train')
+    predict_labels_only = predict_kwargs.get('predict_labels_only')
     color_by_height = predict_kwargs.get('color_by_height')
 
     testing = False
@@ -61,17 +62,17 @@ def cropland_classification(args):
 
     logger.info('#### Cropland Classification')
     clean_train_shapefiles()
-    feature_dir = img_dir + '/43SFR/raster/' if not testing else img_dir + '/43SFR/raster_sample/'
+    feature_dir = img_dir + '43SFR/raster/' if not testing else img_dir + '43SFR/raster_sample/'
 
     # prepare train and validation dataset
     df_tv, meta, feature_names, polygons, _ = \
         prepare_data(logger=logger, dataset='train_val', feature_dir=feature_dir, window=None,
                      label_path='./data/train_labels/train_labels.shp', smooth=smooth,
-                     engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name, 
+                     engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
                      fill_missing=fill_missing, check_missing=check_missing,
-                     vis_stack=args.vis_stack, vis_profile=args.vis_profile)
+                     vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='cropland')
     n_feature = len(feature_names)
-    cat_mask = df_tv.cat_mask.values 
+    cat_mask = df_tv.cat_mask.values
     df_train_val, x_train_val, y_train_val = \
         get_valid_cropland_x_y(logger, df=df_tv, n_feature=n_feature, dataset='train_val')
     coords_train_val = gpd.GeoDataFrame({'geometry': df_train_val.coords.values})
@@ -99,12 +100,13 @@ def cropland_classification(args):
 
     # pre-defined parameters
     predefined_params = {
-        'svc': {'classification__C': 10, 'classification__gamma': 'auto', 
+        'svc': {'classification__C': 10, 'classification__gamma': 'auto',
                 'classification__kernel': 'poly', 'classification__random_state': random_state},
-        'rfc': {'classification__criterion': 'entropy', 'classification__max_depth': 10, 'classification__max_samples': 0.8, 
+        'rfc': {'classification__criterion': 'entropy', 'classification__max_depth': 10,
+                'classification__max_samples': 0.8,
                 'classification__n_estimators': 100, 'classification__random_state': random_state},
-        'mlp': {'classification__activation': 'relu', 'classification__alpha': 0.0001, 
-                'classification__early_stopping': True, 'classification__hidden_layer_sizes': (300,), 
+        'mlp': {'classification__activation': 'relu', 'classification__alpha': 0.0001,
+                'classification__early_stopping': True, 'classification__hidden_layer_sizes': (300,),
                 'classification__max_iter': 200, 'classification__random_state': random_state}
     }
 
@@ -115,7 +117,8 @@ def cropland_classification(args):
         # grid search
         if cv_type:
             # get model and parameters
-            model, params_grid = get_model_and_params_dict_grid(model_name, random_state, testing, study_scaling, engineer_feature)
+            model, params_dict_grid = get_model_and_params_dict_grid(model_name, random_state, testing)
+            params_grid = get_addtional_params(params_dict_grid, testing, study_scaling, engineer_feature)
             logger.info(f'Grid parameters dict {params_grid}')
             if cv_type == 'block' or cv_type == 'spatial':
                 cv = scv.split(coords_train_val)
@@ -133,22 +136,24 @@ def cropland_classification(args):
         else:
             best_model_init = get_best_model_initial(model_name, predefined_params[model_name])
             if engineer_feature == 'select':
-                raise ValueError('Cannot build pipeline with SequentialFeatureSelector while using predefined parameters.')
-            best_estimator = get_pipeline(best_model_init, scaling, 
-                                            study_scaling=False, engineer_feature=engineer_feature)
+                raise ValueError(
+                    'Cannot build pipeline with SequentialFeatureSelector while using predefined parameters.')
+            best_estimator = get_pipeline(best_model_init, scaling,
+                                          study_scaling=False, engineer_feature=engineer_feature)
             logger.info(best_estimator)
             best_estimator.fit(x_train_val, y_train_val)
         pickle.dump(best_estimator, open(f'./models/{log_time}_{model_name}.pkl', 'wb'))
 
         # predict and evaluation
-        test(logger, best_estimator, x_train_val, y_train_val, meta, df_train_val.index, 
-             cat_mask=cat_mask, region_shp_path='./data/train_labels/train_labels.shp', color_by_height=color_by_height, 
-             pred_name=f'{log_time}_{model_name}_labels', ancilliary_dir=ancilliary_dir, feature_names=None)
-        if predict_train:
+        test(logger, best_estimator, x_train_val, y_train_val, meta, df_train_val.index, cat_mask=cat_mask,
+             pred_name=f'{log_time}_{model_name}_labels', ancillary_dir=ancillary_dir, feature_names=None,
+             region_indicator='./data/train_labels/train_labels.shp', color_by_height=color_by_height)
+        if not predict_labels_only:
             x = df_tv.loc[:, feature_names]
             predict(logger, best_estimator, x, meta, cat_mask=cat_mask,
-                    region_shp_path='./data/train_region/train_region.shp', color_by_height=color_by_height, 
-                    pred_path=f'./preds/{log_time}_{model_name}.tiff', ancilliary_dir=ancilliary_dir)
+                    pred_path=f'./preds/{log_time}_{model_name}.tiff', ancillary_dir=ancillary_dir,
+                    region_indicator='./data/train_region/train_region.shp', color_by_height=color_by_height)
+
     if check_SAC:
         # TODO: draw more pairs below 5km, see the values of auto-correlation
         # TODO: how many pixels are we moving if use buffer_radius=3km as suggested in the semi-variogram
@@ -171,12 +176,12 @@ def cropland_classification(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # TODO: buffer changes to meter
+    # TODO: buffer radius as meter
     parser.add_argument('--config_filename', type=str, default='./data/config/cropland_workstation.yaml')
     parser.add_argument('--vis_stack', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)
     parser.add_argument('--vis_cv', type=bool, default=False)
-    
+
     args = parser.parse_args()
 
     cropland_classification(args)

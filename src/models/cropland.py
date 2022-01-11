@@ -1,38 +1,64 @@
-import pickle
-from numpy import meshgrid
-from scipy.stats import uniform, loguniform, randint
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import classification_report
+
+from src.data.write import save_predictions_geotiff
+from src.models.util import convert_partial_predictions
 from src.evaluation.evaluate import evaluate_by_gfsad, evaluate_by_copernicus, \
     impurity_importance_table, permutation_importance_table
+from src.evaluation.util import adjust_raster_size
 
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.feature_selection import SelectKBest, f_classif
-from src.models.base_model import convert_partial_predictions
-from src.utils.util import save_predictions_geotiff
-from src.evaluation.evaluate import adjust_raster_size
-        
 
-def test(logger, model, x_test, y_test, meta, index, cat_mask, region_shp_path, 
-         pred_name, ancilliary_dir, color_by_height, feature_names=None):
+def test(logger, model, x_test, y_test, meta, index, cat_mask,
+         pred_name, ancillary_dir, color_by_height,
+         region_indicator=None, feature_names=None):
+    """
+    Test the cropland model performance, usually use partial data.
+
+    Parameters
+    ----------
+    logger
+    model
+    x_test: np.array
+        shape (n_test, n_feature)
+    y_test: np.array
+        shape (n_test, )
+    meta: dict
+        meta information
+    index: np.array
+        shape (n_test, )
+    cat_mask: np.array
+        shape (n_data)
+    pred_name: str
+        filename to save prediction
+    ancillary_dir: str
+        directory of ancillary data
+    color_by_height: bool
+        whether to add a band with colored mask
+    region_indicator: str or rasterio.window.Window or None
+        an indicator of the area to predict
+    feature_names: list or None
+        a list of feature name, set as None if don't want to feature importance evaluation
+
+    Returns
+    -------
+    None
+    """
     logger.info("## Testing")
     # predict
     y_test_pred = model.predict(x_test)
-    y_test_pred_converted = convert_partial_predictions(y_test_pred, index, meta)
+    y_test_pred_converted = convert_partial_predictions(y_test_pred, index, meta['height'] * meta['width'])
     # save prediction
     pred_path = f'./preds/{pred_name}.tiff'
-    save_predictions_geotiff(y_test_pred_converted, meta, pred_path, region_shp_path, 
-                            cat_mask, color_by_height)
+    save_predictions_geotiff(y_test_pred_converted, meta, pred_path, cat_mask, region_indicator, color_by_height)
     logger.info(f'Saved predictions to {pred_path}')
     # evaluate
     logger.info('Evaluating by metrics...')
     metrics = evaluate_by_metrics(y_test, y_test_pred)
     logger.info(f'\n{metrics}')
     logger.info('Evaluating by open datasets')
-    msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_path, ancilliary_dir, label_only=True)
+    msgs = evaluate_by_open_datasets(meta, region_indicator, pred_path, ancillary_dir, label_only=True)
     for msg in msgs:
         logger.info(msg)
     if feature_names is not None:
@@ -40,17 +66,46 @@ def test(logger, model, x_test, y_test, meta, index, cat_mask, region_shp_path,
         evaluate_by_feature_importance(model['classification'], x_test, y_test, feature_names, pred_name)
 
 
-def predict(logger, model, x, meta, cat_mask, region_shp_path, 
-            pred_path, ancilliary_dir, color_by_height, eval_open=True):
+def predict(logger, model, x, meta, cat_mask,
+            pred_path, ancillary_dir, color_by_height,
+            region_indicator=None, eval_open=True):
+    """
+    Make prediction of the cropland model, usually a whole area.
+
+    Parameters
+    ----------
+    logger
+    model
+    x: np.array
+        shape (n_data, n_feature)
+    meta: dict
+        meta data
+    cat_mask: np.array
+        shape (n_data, n_fetaure)
+    pred_path: str
+        path to store predictions, usually at N drive
+    ancillary_dir: str
+        directory of ancillary data
+    color_by_height: bool
+        whether to add a band with colored mask
+    region_indicator: str or rasterio.window.Window or None
+        an indicator of the area to predict
+    eval_open: bool
+        whether to evaluate by open datasets.
+
+    Returns
+    -------
+    None 
+    """
     logger.info("## Predicting")
     y_pred = model.predict(x)
     # save prediction
-    save_predictions_geotiff(y_pred, meta, save_path=pred_path, 
-        region_indicator=region_shp_path, cat_mask=cat_mask, color_by_height=color_by_height)
+    save_predictions_geotiff(y_pred, meta, pred_path, cat_mask,
+                             region_indicator=region_indicator, color_by_height=color_by_height)
     logger.info(f'Saved predictions to {pred_path}')
     # evaluate 
     if eval_open:
-        msgs = evaluate_by_open_datasets(meta, region_shp_path, pred_path, ancilliary_dir, label_only=False)
+        msgs = evaluate_by_open_datasets(meta, region_indicator, pred_path, ancillary_dir, label_only=False)
         for msg in msgs:
             logger.info(msg)
 
@@ -68,18 +123,18 @@ def evaluate_by_feature_importance(model, x_test, y_test, feature_names, pred_na
         impurity_importance_table(feature_names, model.feature_importances_, II_path)
 
 
-def evaluate_by_open_datasets(meta, region_indicator, pred_path, ancilliary_dir, label_only=True):
-    district = region_indicator.split('/')[-2].split('_')[-1] if isinstance(region_indicator, str) else None 
+def evaluate_by_open_datasets(meta, region_indicator, pred_path, ancillary_dir, label_only=True):
+    district = region_indicator.split('/')[-2].split('_')[-1] if isinstance(region_indicator, str) else None
     msgs = []
 
     gfsad_args = {
         'dataset': 'gfsad',
-        'raw_path': ancilliary_dir + 'cropland/GFSAD30/GFSAD30SAAFGIRCE_2015_N30E70_001_2017286103800.tif',
+        'raw_path': ancillary_dir + 'cropland/GFSAD30/GFSAD30SAAFGIRCE_2015_N30E70_001_2017286103800.tif',
         'evaluate_func': evaluate_by_gfsad
     }
     copernicus_args = {
         'dataset': 'copernicus',
-        'raw_path': ancilliary_dir + 'landcover/Copernicus_LC100m/INDIA_2019/' + \
+        'raw_path': ancillary_dir + 'landcover/Copernicus_LC100m/INDIA_2019/' + \
                     'E060N40_PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif',
         'evaluate_func': evaluate_by_copernicus
     }
@@ -93,7 +148,26 @@ def evaluate_by_open_datasets(meta, region_indicator, pred_path, ancilliary_dir,
     return msgs
 
 
-def get_model_and_params_dict_grid(model_name, random_state, testing, study_scaling, engineer_feature):
+def get_model_and_params_dict_grid(model_name, random_state, testing):
+    """
+    Get the initial cropland model and a dictionary of its hyper-parameter space.
+
+    Parameters
+    ----------
+    model_name: str
+        choices = [svc, rfc, mlp]
+    random_state: int
+        random seed
+    testing: bool
+        whether we are testing or not
+
+    Returns
+    -------
+    model:
+        a sklearn model
+    params_dict: dict
+        a dictionary of hyper-parameter space
+    """
     if model_name == 'svc':
         model = SVC()
         if not testing:
@@ -148,23 +222,24 @@ def get_model_and_params_dict_grid(model_name, random_state, testing, study_scal
                 classification__early_stopping=[True],
                 classification__random_state=[random_state]
             )
-    if study_scaling and engineer_feature == 'select':
-        p1 = params_dict.copy().update({'scale_minmax': ['passthrough'], 'feature_selection__k': [75, 100, 150, 200, 300, 400]})
-        p2 = params_dict.copy().update({'scale_std': ['passthrough'], 'feature_selection__k': [75, 100, 150, 200, 300, 400]})
-        params_list = [p1, p2]
-    elif study_scaling and engineer_feature != 'select':
-        p1 = params_dict.copy().update({'scale_minmax': ['passthrough']})
-        p2 = params_dict.copy().update({'scale_std': ['passthrough']})
-        params_list = [p1, p2]
-    elif not study_scaling and engineer_feature == 'select':
-        params_dict.update({'feature_selection__k': [75, 100, 150, 200, 300, 400]})
-        params_list = [params_dict]
-    else:  # not study_scaling and engineer_feature != 'select':
-        params_list = [params_dict]
-    return model, params_list
+    return model, params_dict
 
 
 def get_best_model_initial(model_name, best_params):
+    """
+    Get the defined cropland model given parameters.
+
+    Parameters
+    ----------
+    model_name: str
+        choices = [svc, rfc, mlp]
+    best_params: dict
+        a dictionary of best hyper-parameters of the model
+
+    Returns
+    -------
+    best_model: a sklearn model
+    """
     if model_name == 'svc':
         best_model = SVC(
             C=best_params['classification__C'],
@@ -190,22 +265,3 @@ def get_best_model_initial(model_name, best_params):
             random_state=best_params['classification__random_state']
         )
     return best_model
-
-
-def get_pipeline(model, scaling, study_scaling=False, engineer_feature=None, k_feature=10):
-    # decide pipeline structure
-    pipeline_list = []
-    if study_scaling:
-        pipeline_list.append(('scale_minmax', MinMaxScaler()))
-        pipeline_list.append(('scale_std', StandardScaler()))
-    else:
-        if scaling == 'standardize':
-            pipeline_list.append(('scale_std', StandardScaler()))
-        elif scaling == 'normalize':
-            pipeline_list.append(('scale_minmax', MinMaxScaler()))
-    if engineer_feature == 'select':
-        pipeline_list.append(('feature_selection', SelectKBest(f_classif, k=k_feature)))
-    pipeline_list.append(('classification', model))
-    # build pipeline
-    pipe = Pipeline(pipeline_list)
-    return pipe

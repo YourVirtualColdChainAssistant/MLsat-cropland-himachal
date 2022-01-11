@@ -1,88 +1,9 @@
-import os
-import fiona
-import skimage 
-from rasterio.windows import Window
-import shapely
-import argparse
 import numpy as np
 import pandas as pd
-import geopandas as gpd
 import rasterio
 from sklearn.inspection import permutation_importance
-from src.utils.clip import clip_single_raster
-import pyproj
 
-
-def load_geotiff(path, window=None, read_as='as_integer'):
-    """ Load the geotiff as a list of numpy array.
-        INPUT : path (str) -> the path to the geotiff
-                window (rasterio.windows.Window) -> the window to use when loading the image
-        OUTPUT : band (list of numpy array) -> the different bands unscaled
-                 meta (dictionary) -> the metadata associated with the geotiff
-    """
-    with rasterio.open(path) as f:
-        if read_as == 'as_float':
-            band = [skimage.img_as_float(f.read(i + 1, window=window)) for i in range(f.count - 1)]
-        elif read_as == 'as_reflectance':
-            band = [f.read(i + 1, window=window) / 10000 for i in range(f.count - 1)]
-        else:  # normal read as integer
-            band = [f.read(i + 1, window=window) for i in range(f.count - 1)]
-        band.append(f.read(f.count, window=window))
-        meta = f.meta
-        if window is not None:
-            meta['height'] = window.height
-            meta['width'] = window.width
-            meta['transform'] = f.window_transform(window)
-    return band, meta
-
-
-def adjust_raster_size(dataset_path, out_path, region_indicator, meta, label_only=True):
-    # clip to a bounding box, to reduce computation cost
-    if isinstance(region_indicator, str):
-        region_shp = gpd.read_file(region_indicator).to_crs(meta['crs'])
-        minx, miny, maxx, maxy = region_shp.total_bounds
-        box_shp = gpd.GeoDataFrame({'geometry': shapely.geometry.box(minx, miny, maxx, maxy)}, index=[0])
-        box_shp = box_shp.set_crs(meta['crs'])
-    elif isinstance(region_indicator, Window):
-        minx, miny, maxx, maxy = rasterio.windows.bounds(region_indicator, meta['transform'])
-        box_shp = gpd.GeoDataFrame({'geometry': shapely.geometry.box(minx, miny, maxx, maxy)}, index=[0])
-        box_shp = box_shp.set_crs(meta['crs'])
-    else:
-        raise ValueError(f'Cannot adjust raster size by {region_indicator}')
-    inter_path = out_path.replace(out_path.split('_')[-1], 'intermediate_result.tiff')
-    clip_raster_to_shp(dataset_path, inter_path, box_shp)
-    # align with same resolution
-    align_raster(inter_path, out_path, meta, (minx, miny, maxx, maxy))
-    if label_only:
-        clip_raster_to_shp(out_path, out_path, region_shp)
-    os.remove(inter_path)
-
-
-def clip_raster_to_shp(in_path, out_path, region_shp):
-    with rasterio.open(in_path, 'r') as src0:
-        in_crs = src0.crs
-    if region_shp.crs != in_crs:
-        region_shp = region_shp.to_crs(in_crs)
-    region_shapes = [shapely.geometry.mapping(s) for s in region_shp.geometry if s is not None]
-    clip_single_raster(region_shapes, in_path, out_path)
-
-
-def align_raster(in_path, out_path, meta, bounds):
-    """
-    Align according to prediction file (with boundary and resolution adjustment).
-    -te {bounds.left} {bounds.bottom} {bounds.right} {bounds.top}
-    bounds = (minx, miny, maxx, maxy)
-    """
-    # gdalwarp cannot support ogc_wkt, so convert to esri_wkt
-    crs = pyproj.CRS.from_string(meta['crs'].to_string()).to_wkt(version='WKT1_ESRI')
-    # command
-    cmd = f"gdalwarp -overwrite -r average -t_srs {crs} -ts {meta['width']} {meta['height']} " + \
-          f"-te {bounds[0]} {bounds[1]} {bounds[2]} {bounds[3]} {in_path} {out_path}"
-    returned_val = os.system(cmd)
-    if returned_val == 0:
-        print('Aligned raster!')
-    else:
-        raise ValueError('Alignment failed!')
+from src.data.load import load_geotiff
 
 
 def evaluate_by_gfsad(pred_path, dataset_path):
@@ -100,7 +21,8 @@ def evaluate_by_gfsad(pred_path, dataset_path):
 
     Returns
     -------
-
+    msg: string
+        message of results
     """
     # load data
     band_pred, _ = load_geotiff(pred_path, read_as='as_integer')
@@ -114,9 +36,9 @@ def evaluate_by_gfsad(pred_path, dataset_path):
 
     # result
     msg = f'\nCropland pixel number in GFASD: {n_dataset}' + \
-            f'\nCropland pixel number in prediction: {n_pred}' + \
-            f'\nPercentage: {n_pred / n_dataset * 100:.2f}%'
-    return msg 
+          f'\nCropland pixel number in prediction: {n_pred}' + \
+          f'\nPercentage: {n_pred / n_dataset * 100:.2f}%'
+    return msg
 
 
 def evaluate_by_copernicus(pred_path, dataset_path):
@@ -134,7 +56,8 @@ def evaluate_by_copernicus(pred_path, dataset_path):
 
     Returns
     -------
-
+    msg: string
+        message of results
     """
     # load data
     band_pred, _ = load_geotiff(pred_path, read_as='as_integer')

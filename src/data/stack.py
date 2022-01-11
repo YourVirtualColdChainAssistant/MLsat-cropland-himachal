@@ -3,10 +3,11 @@ import re
 import datetime
 import numpy as np
 import pandas as pd
-from src.utils.util import load_geotiff
+import collections
 from itertools import groupby
 import matplotlib.pyplot as plt
-import collections
+
+from src.data.load import load_geotiff
 
 
 def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as='as_integer',
@@ -18,21 +19,26 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
         ['NO_DATA', 'SATURATED_OR_DEFECTIVE', 'DARK_AREA_PIXELS', 'CLOUD_SHADOWS', 'VEGETATION', 'NOT_VEGETATED',
          'WATER', 'UNCLASSIFIED', 'CLOUD_MEDIUM_PROBABILITY', 'CLOUD_HIGH_PROBABILITY', 'THIN_CIRRUS', 'SNOW']
 
-    :param logger: std::out
-    :param from_dir: string
-    :param meta:
-    :params descriptions:
-    :param window: rasterio.window.Window
-    :param read_as: string
-        choices = ['as_raw', 'as_float', 'as_TOA']
-    :param way: string
-        choices = ['raw', 'weekly', 'monthly']
-    :param check_missing: bool
+    Parameters
+    ----------
+    logger
+    from_dir: str
+        path storing satellite raster images.
+    meta: dict
+        Meta data
+    descriptions: list
+        A list of band name.
+    window: rasterio.window.Window or None
+        The window to load images.
+    read_as: choices = [as_integer, as_float, as_reflectance]
+    way: [raw, weekly, monthly]
+    check_missing: bool
 
-    :return: bands_array, cat_pixel, meta, timestamps_bf, timestamps_weekly
-    bands_array: array
+    Returns
+    -------
+    bands_array: np.array
         shape (height, width, n_bands, n_weeks)
-    cat_pixel: array
+    cat_pixel: np.array
         shape (height * width, )
     timestamps_bf: the raw timestamps
     """
@@ -62,7 +68,7 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
                 band, _ = load_geotiff(raster_path, window, read_as)
                 print('After loading data:', datetime.datetime.now())
                 cat_mask = categorize_scene_classification(band[idx_cloud])
-                band = np.stack(band, axis=2)[:,:,idx_other]
+                band = np.stack(band, axis=2)[:, :, idx_other]
                 # pixel values check
                 if (cat_mask == 0).sum() != n_total:
                     band_list.append(band.reshape(-1, meta['count']))
@@ -75,7 +81,7 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
             # merge images of a period by taking max
             band_list, cat_mask_list = get_cloudless(band_list, cat_mask_list)
             # check gaps
-            n_zero = (band_list[:,0] == 0).sum()
+            n_zero = (band_list[:, 0] == 0).sum()
             n_nodata = (cat_mask_list == 0).sum()
             n_cloudy = (cat_mask_list == 1).sum()
             p_zero_list.append(round(n_zero / n_total, 4))
@@ -100,14 +106,14 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
             logger.info(f'  [{i}/{len(timestamps_ref)}] {timestamp} (0)')
         band_lists.append(band_list)
         cat_mask_lists.append(cat_mask_list)
-    
+
     logger.info(f'  avg. cloud coverage = {np.array(p_cloud_list).mean():.4f}')
     logger.info(f'  avg. filling ratio = {np.array(p_fill_list).mean():.4f}')
     logger.info(f'  avg. zero ratio = {np.array(p_zero_list).mean():.4f}')
 
     # decide cat for each pixel 
     cat_pixel = categorize_pixel(cat_mask_lists)
-    
+
     # stack finally
     bands_array = np.stack(band_lists, axis=2).reshape(meta['height'], meta['width'], meta['count'], -1)
 
@@ -163,6 +169,90 @@ def get_monthly_timestamps():
     return monthly_timestamps
 
 
+def categorize_scene_classification(scene):
+    """
+    Categorize original 11 scenes into 4 groups.
+    0 = nodata,
+    1 = cloudy,
+    2 = no need to predict,
+    3 = normal
+
+    Parameters
+    ----------
+    scene: np.array
+        shape (height, width)
+
+    Returns
+    -------
+    cat_mask: np.array
+        shape (height, width)
+    """
+    cat_mask = np.zeros_like(scene)
+    cat_mask[(scene == 1) | (scene == 2) | (scene == 4) | (scene == 5)] = 3
+    cat_mask[(scene == 6) | (scene == 11)] = 2
+    cat_mask[(scene == 3) | (scene == 7) | (scene == 8) | (scene == 9) | (scene == 10)] = 1
+    return cat_mask
+
+
+def get_cloudless(band_list, cat_mask_list):
+    """
+    Get cloudless bands from possibly multiple bands.
+
+    Parameters
+    ----------
+    band_list: A list of nd.array
+        shape (height * width, n_band)
+    cat_mask_list: A list of nd.array
+        shape (height * width, )
+
+    Returns
+    ----------
+    band_cloudless: np.array
+        shape ()
+    cat_mask_cloudless: np.array
+        shape (height * width, )
+    """
+    band_stacked = np.stack(band_list, axis=2)
+    cat_mask_stacked = np.stack(cat_mask_list, axis=1)
+    cat_mask_cloudless = cat_mask_stacked.max(axis=1)
+    # get cloudless by taking max
+    cloudy_mask = (cat_mask_cloudless == 1)
+    argmax = cat_mask_stacked.argmax(axis=1)
+    band_cloudless = band_stacked[np.arange(argmax.shape[0]), :, argmax]
+    # fill cloudy data as 0 for further processing
+    band_cloudless[cloudy_mask] = 0
+    return band_cloudless, cat_mask_cloudless
+
+
+def categorize_pixel(cat_mask_lists):
+    """
+    Cetagorize each pixel given the time series mask.
+
+    Parameters
+    ----------
+    cat_mask_lists: A list of nd.array
+        n_col of shape (height * width)
+
+    Returns
+    ----------
+    cat_pixel: np.array
+        shape (n_data, )
+    """
+    cat_mask_stacked = np.stack(cat_mask_lists, axis=1)
+    n_data, n_col = cat_mask_stacked.shape
+    n0 = (cat_mask_stacked == 0).sum(axis=1)
+    n1 = (cat_mask_stacked == 1).sum(axis=1)
+    n2 = (cat_mask_stacked == 2).sum(axis=1)
+    n3 = (cat_mask_stacked == 3).sum(axis=1)
+
+    cat_pixel = np.zeros(n_data)  # by default = No Data
+    more = np.stack([n2, n3], axis=1).argmax(axis=1)
+    cat_pixel[((n0 + n1) != n_col) & (more == 0)] = 2  # don't predict
+    cat_pixel[((n0 + n1) != n_col) & (more == 1)] = 3  # predict
+
+    return cat_pixel
+
+
 def check_missing_condition(zero_mask_list, timestamps_ref, n_total):
     # check filling occurrence
     zero_mask_arr = np.array(zero_mask_list)
@@ -172,8 +262,8 @@ def check_missing_condition(zero_mask_list, timestamps_ref, n_total):
     plt.xlim(0, len(timestamps_ref))
     plt.xlabel('Filling counts')
     plt.ylabel('Occurrence')
-    plt.savefig('../figs/filling_occurrence.png', bbox_inches='tight')
-    save_dict_to_df(counts, '../figs/filling_occurrence.csv')
+    plt.savefig('./figs/filling_occurrence.png', bbox_inches='tight')
+    save_dict_to_df(counts, './figs/filling_occurrence.csv')
 
     consecutive_highest = []
     for i in range(n_total):
@@ -185,8 +275,8 @@ def check_missing_condition(zero_mask_list, timestamps_ref, n_total):
     plt.xlim(0, len(timestamps_ref))
     plt.xlabel('Filling counts')
     plt.ylabel('Highest consecutive occurrence')
-    plt.savefig('../figs/filling_highest_consecutive_occurrence.png', bbox_inches='tight')
-    save_dict_to_df(consecutive_counts_highest, '../figs/filling_highest_consecutive_occurrence.csv')
+    plt.savefig('./figs/filling_highest_consecutive_occurrence.png', bbox_inches='tight')
+    save_dict_to_df(consecutive_counts_highest, './figs/filling_highest_consecutive_occurrence.csv')
 
     consecutive = []
     for i in range(n_total):
@@ -198,8 +288,8 @@ def check_missing_condition(zero_mask_list, timestamps_ref, n_total):
     plt.xlim(0, len(timestamps_ref))
     plt.xlabel('Filling counts')
     plt.ylabel('Consecutive occurrence')
-    plt.savefig('../figs/filling_consecutive_occurrence.png', bbox_inches='tight')
-    save_dict_to_df(consecutive_counts, '../figs/filling_consecutive_occurrence.csv')
+    plt.savefig('./figs/filling_consecutive_occurrence.png', bbox_inches='tight')
+    save_dict_to_df(consecutive_counts, './figs/filling_consecutive_occurrence.csv')
 
 
 def highest_occ(b):
@@ -225,51 +315,3 @@ def save_dict_to_df(d, save_path):
     df['con'] = d.keys()
     df['occ'] = d.values()
     df.to_csv(save_path, index=False)
-
-
-def categorize_scene_classification(scene):
-    # mask cloud, where 0 = nodata, 1 = cloudy, 2 = no need to predict, 3 = normal
-    cat_mask = np.zeros_like(scene)
-    cat_mask[(scene == 1) | (scene == 2) | (scene == 4) | (scene == 5)] = 3
-    cat_mask[(scene == 6) | (scene == 11)] = 2
-    cat_mask[(scene == 3) | (scene == 7) | (scene == 8) | (scene == 9) | (scene == 10)] = 1
-    return cat_mask
-
-
-def get_cloudless(band_list, cat_mask_list):
-    """
-    band_list: A list of nd.array
-        shape (height * width, n_band)
-    cat_mask_list: A list of nd.array
-        shape (height * width, )
-    """
-    band_stacked = np.stack(band_list, axis=2)
-    cat_mask_stacked = np.stack(cat_mask_list, axis=1)
-    cat_mask_cloudless = cat_mask_stacked.max(axis=1)
-    # get cloudless by taking max
-    cloudy_mask = (cat_mask_cloudless == 1)
-    argmax = cat_mask_stacked.argmax(axis=1)
-    band_cloudless = band_stacked[np.arange(argmax.shape[0]), :, argmax]
-    # fill cloudy data as 0 for further processing
-    band_cloudless[cloudy_mask] = 0
-    return band_cloudless, cat_mask_cloudless
-
-
-def categorize_pixel(cat_mask_lists):
-    """
-    cat_mask_lists: A list of nd.array
-        n_col of shape (height * width)
-    """
-    cat_mask_stacked = np.stack(cat_mask_lists, axis=1)
-    n_data, n_col = cat_mask_stacked.shape
-    n0 = (cat_mask_stacked == 0).sum(axis=1)
-    n1 = (cat_mask_stacked == 1).sum(axis=1)
-    n2 = (cat_mask_stacked == 2).sum(axis=1)
-    n3 = (cat_mask_stacked == 3).sum(axis=1)
-    
-    cat_pixel = np.zeros(n_data)  # by default = No Data 
-    more = np.stack([n2, n3], axis=1).argmax(axis=1)
-    cat_pixel[((n0+n1) != n_col) & (more == 0)] = 2  # don't predict 
-    cat_pixel[((n0+n1) != n_col) & (more == 1)] = 3  # predict 
-
-    return cat_pixel

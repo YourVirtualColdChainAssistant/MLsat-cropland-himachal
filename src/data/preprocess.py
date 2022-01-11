@@ -1,16 +1,33 @@
 import os
+import copy
 import glob
 import shutil
 import zipfile
 import argparse
-import rasterio
 import numpy as np
-from src.utils.util import resample, find_file, find_folder, find_top_level
-import copy
 import multiprocessing
+import rasterio
+from pyproj import CRS
+import xml.etree.ElementTree as ET
+
+from src.utils.util import resample, find_file, find_folder, find_top_level
 
 
-def process(args):
+def preprocess(args):
+    """
+    Preprocess the downloaded files.
+    1. unzip: raw -> L1C
+    2. atmospheric correction: L1C -> L2A
+    3. merge: L2A -> tiff (with cloud mask)
+
+    Parameters
+    ----------
+    args
+
+    Returns
+    -------
+
+    """
     print(args)
     if args.work_station:
         img_dir = '/mnt/N/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/'
@@ -18,12 +35,12 @@ def process(args):
         img_dir = 'N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/'
     tile_dir = img_dir + args.tile_id + '/'
     raw_dir = tile_dir + 'raw/'
-    corrected_dir = tile_dir + 'L2A/'
-    geotiff_dir = tile_dir + 'raster/'
-    if not os.path.exists(corrected_dir):
-        os.mkdir(corrected_dir)
-    if not os.path.exists(geotiff_dir):
-        os.mkdir(geotiff_dir)
+    l2a_dir = tile_dir + 'L2A/'
+    raster_dir = tile_dir + 'raster/'
+    if not os.path.exists(l2a_dir):
+        os.mkdir(l2a_dir)
+    if not os.path.exists(raster_dir):
+        os.mkdir(raster_dir)
 
     if args.work_station:
         sen2cor_path = 'sudo /home/lida/Documents/Sen2Cor-02.09.00-Linux64/bin/L2A_Process'
@@ -37,13 +54,29 @@ def process(args):
         if not os.path.exists(safe_dir):
             os.mkdir(safe_dir)
         unzip_products(raw_dir, safe_dir, args.store_inter)
-        atmospheric_correction(sen2cor_path, safe_dir, corrected_dir, args.store_inter)  # absolute path to call sen2cor
+        atmospheric_correction(sen2cor_path, safe_dir, l2a_dir, args.store_inter)  # absolute path to call sen2cor
     else:
-        unzip_products(raw_dir, corrected_dir, args.store_inter)
-    merge_to_raster(corrected_dir, geotiff_dir)
+        unzip_products(raw_dir, l2a_dir, args.store_inter)
+    merge_to_raster(l2a_dir, raster_dir)
 
 
 def unzip_products(raw_dir, safe_dir, store_inter):
+    """
+    Unzip all products.
+
+    Parameters
+    ----------
+    raw_dir: str
+        path storing zipped files.
+    safe_dir: str
+        path to store unzipped files.
+    store_inter: bool
+        whether store unzipped files once generated unzipped files.
+
+    Returns
+    -------
+
+    """
     raw_files = os.listdir(raw_dir)
     for i, raw_file in enumerate(raw_files, start=1):
         # unzip
@@ -56,23 +89,55 @@ def unzip_products(raw_dir, safe_dir, store_inter):
     print("Unzip done!")
 
 
-def atmospheric_correction(sen2cor_path, safe_dir, corrected_dir, store_inter):
+def atmospheric_correction(sen2cor_path, safe_dir, l2a_dir, store_inter):
+    """
+    Correct atmospherically.
+
+    Parameters
+    ----------
+    sen2cor_path: str
+        path placing stand-alone Sen2Cor tool.
+    safe_dir: str
+        path storing L1A level files.
+    l2a_dir: str
+        path to store corrected files.
+    store_inter: bool
+        Whether to keep L1A files once generated L2A files.
+
+    Returns
+    -------
+
+    """
     safe_files = os.listdir(safe_dir)
     for i, safe_file in enumerate(safe_files, start=1):
         safe_file_dir = safe_dir + safe_file
-        if is_corrected(safe_file_dir, corrected_dir):
+        if is_corrected(safe_file_dir, l2a_dir):
             print(f"[{i}/{len(safe_files)}] {safe_file_dir} corrected!")
         else:
             print(f"[{i}/{len(safe_files)}] Correcting {safe_file_dir}")
-            os.system(f'{sen2cor_path} {safe_file_dir} --output_dir {corrected_dir}')
+            os.system(f'{sen2cor_path} {safe_file_dir} --output_dir {l2a_dir}')
             if not store_inter:
                 shutil.rmtree(safe_file_dir)
     print("Correction done!")
 
 
-def is_corrected(file_dir_to_correct, corrected_dir):
+def is_corrected(file_dir_to_correct, l2a_dir):
+    """
+    Check if a SAFE file has already been corrected.
+
+    Parameters
+    ----------
+    file_dir_to_correct: str
+        safe_dir to check
+    l2a_dir: str
+        path storing jp2 files
+
+    Returns
+    -------
+    bool
+    """
     name_L2A = os.listdir(file_dir_to_correct + '/GRANULE/')[0].replace('L1C', 'L2A')
-    folders = find_top_level(name_L2A.split('_')[-1].split('T')[0], corrected_dir)
+    folders = find_top_level(name_L2A.split('_')[-1].split('T')[0], l2a_dir)
     result = []
     for folder in folders:
         result = result + find_folder(name_L2A, folder)
@@ -105,20 +170,37 @@ def is_corrected(file_dir_to_correct, corrected_dir):
         return False
 
 
-def merge_to_raster(corrected_dir, geotiff_dir):
+def merge_to_raster(l2a_dir, raster_dir):
+    """
+    Merge multiple jps file into a raster for several folders.
+
+    Parameters
+    ----------
+    l2a_dir: str
+        path storing jp2 files
+    raster_dir: str
+        path to store raster files
+
+    Returns
+    -------
+
+    """
     # get crs first
-    crs = get_crs_from_SCL(corrected_dir)
-    print(f'crs = {crs}')
+    crs = get_crs_from_xml(l2a_dir)
+    if crs:
+        print(f'crs = {crs}')
+    else:
+        raise ValueError('No CRS is found in SCL file.')
 
     # list files
-    file_paths = [f for f in os.listdir(corrected_dir)]
+    file_paths = [f for f in os.listdir(l2a_dir)]
     print('Merging raster...')
     # save to single geotiff
     for i, file_path in enumerate(file_paths, start=1):
-        in_dir = corrected_dir + file_path + '/GRANULE/'
+        in_dir = l2a_dir + file_path + '/GRANULE/'
         file_name = os.listdir(in_dir)[0]
         in_path = in_dir + file_name + '/IMG_DATA/R10m/*_B*.jp2'
-        out_path = geotiff_dir + file_name + '.tiff'
+        out_path = raster_dir + file_name + '.tiff'
         cloud_path = find_file('SCL_60m.jp2', in_dir)
         convert_jp2_to_tiff(in_path, out_path, cloud_path, crs)
         print(f'[{i}/{len(file_paths)}] merged {out_path}')
@@ -127,7 +209,7 @@ def merge_to_raster(corrected_dir, geotiff_dir):
 
 def convert_jp2_to_tiff(in_path, out_path, cloud_path, crs):
     """
-    Convert a folder of multiple jp2 images as a single multi-band geotiff
+    Convert a folder of multiple jp2 images as a single multi-band geotiff.
 
     Parameters
     ----------
@@ -176,29 +258,44 @@ def convert_jp2_to_tiff(in_path, out_path, cloud_path, crs):
         dst.set_band_description(i + 1, bands_dcp[i])
 
 
-def get_crs_from_SCL(corrected_dir):
-    corrected_names = os.listdir(corrected_dir)
+def get_crs_from_xml(l2a_dir):
+    """
+    Get crs from xml file. 
+    
+    Parameters
+    ----------
+    l2a_dir: string 
+        path storing raster files.
+
+    Returns
+    -------
+
+    """
+    corrected_names = os.listdir(l2a_dir)
     for corrected_name in corrected_names:
-        file = find_file('SCL_60m.jp2', corrected_dir + corrected_name)
+        file = find_file('MTD_TL.xml', l2a_dir + corrected_name)
         if len(file) == 1:
-            data = rasterio.open(file[0])
-            return data.crs
+            tree = ET.parse(file[0])
+            root = tree.getroot()
+            crs = root[1][0][1].text
+            if crs:
+                return CRS.from_string(crs)
         else:
-            continue
+            raise ValueError('Found multiple meta file.')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--work_station', type=bool, default=False)
+    parser.add_argument('--work_station', type=bool, default=True)
     parser.add_argument('--store_inter', default=True, action='store_false',
                         help='Store the intermediate files (raw and L1C) or not.')
-    parser.add_argument('--tile_ids', nargs="+", default=['43RGP'])
+    parser.add_argument('--tile_ids', nargs="+", default=['43RGQ'])
     args = parser.parse_args()
 
     args_list, tile_ids = [], args.tile_ids
-    print(f'Parallizing to {len(tile_ids)} processes...')
+    print(f'Parallelize to {len(tile_ids)} processes...')
     for tile_id in tile_ids:
         args.tile_id = tile_id
         args_list.append(copy.deepcopy(args))  # deep copy 
     process_pool = multiprocessing.Pool(processes=len(tile_ids))
-    process_pool.map(process, args_list)
+    process_pool.map(preprocess, args_list)

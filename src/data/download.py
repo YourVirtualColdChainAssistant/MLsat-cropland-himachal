@@ -5,7 +5,7 @@ from sentinelsat import SentinelAPI
 
 
 def download(args):
-    for m in range(2, 13):
+    for m in range(2, 3):
         date_range = get_month_first_last_date(m, args.year)
         download_date(args.user, args.password, args.img_dir, args.tile_id, date_range)
     print('Downloaded all the required data!')
