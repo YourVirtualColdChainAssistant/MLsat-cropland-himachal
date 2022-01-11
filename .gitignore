@@ -1,5 +1,6 @@
 models/
 tiles/
+results/
 *.pkl
 .idea
 *.tif

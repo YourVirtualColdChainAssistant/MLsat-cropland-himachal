@@ -1,8 +1,56 @@
+== cropland_20220111-094108 (train)
+   (test)  [rfc]
+	* another k_tune setting (best = 50)
+
+== cropland_20220110-175849 (train) 
+   (test) cropland_20220110-201318_predict
+	* engineer_features=temporal+ndvi_spatial
+
+== cropland_20220110-154830 (train)
+   (test) cropland_20220110-191127_predict
+	* engineer_features=temporal
+
+== cropland_20220109-233002 (train)
+   (test) cropland_20220110-095156_predict [rfc, svc, mlp]
+	* k_tune (best=75)
+
+== cropland_20220105-135132 (train)
+   (test) cropland_20220109-213833_predict [rfc, svc, mlp]
+	* temporal+spatial, spatial uses all bands
+	* cloud mask uses SCL
+
+== cropland_20220104-112305 (train)
+	* k_feature=100, only rfc
+	* cloud mask uses SCL
+
+== cropland_1219-200108 (train)
+	* spatial of all bands, simple cloud mask
+
 == cropland_1213-215737 (train)
    (test) cropland_1214-190023_predict [svc, rfc]
-	* scaling=reflectance, linear filling, engineer features + spatial features, only svc and rfc
+	* scaling=reflectance, linear filling, engineer features + spatial features (only NDVI), only svc and rfc
 
-...More experiments about choose scaling and imputation methods, with hyperparameter tuning by grid search 
+... Experiments about choose scaling and imputation methods, with hyperparameter tuning by grid search 
+
+== cropland_1212-232444 (train)
+	* as_TOA, linear
+
+== cropland_1212-222651 (train)
+	* as_TOA, forward
+
+== cropland_1212-010141 (train)
+	* normaliza, forward
+
+== cropland_1211-174911 (train)
+	* as_float, linear 
+
+== cropland_1210-220956 (train)
+	* as_float, forward
+
+== cropland_1210-161540 (train)
+	* normalize, forward
+
+... Experiments with pre-defined hyper-parameters
 
 == cropland_1208-100402 (train)
    (test) cropland_1208-180911_predict [svc, mlp]
