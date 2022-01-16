@@ -10,7 +10,7 @@ import skgstat as skg
 from sklearn.model_selection import GridSearchCV
 
 from src.data.load import clean_train_shapefiles
-from src.data.prepare import prepare_data, get_valid_cropland_x_y
+from src.data.prepare import prepare_data, prepare_HP_data, get_valid_cropland_x_y
 from src.utils.logger import get_log_dir, get_logger
 from src.utils.util import save_cv_results
 from src.utils.scv import ModifiedBlockCV, ModifiedSKCV, construct_grid_to_fold
@@ -39,7 +39,9 @@ def cropland_classification(args):
     n_fold = train_kwargs.get('n_fold')
     random_state = train_kwargs.get('random_state')
     hp_search_by = train_kwargs.get('hp_search_by')
+    sample_HP = train_kwargs.get('sample_HP')
     # model kwargs
+    composite_by = model_kwargs.get('composite_by')
     fill_missing = model_kwargs.get('fill_missing')
     check_missing = model_kwargs.get('check_missing')
     scaling = model_kwargs.get('scaling')
@@ -64,15 +66,24 @@ def cropland_classification(args):
     clean_train_shapefiles()
     feature_dir = img_dir + '43SFR/raster/' if not testing else img_dir + '43SFR/raster_sample/'
 
+    # prepare other polygons in state
+    # TODO: add more samples distributed in the whole state
+    if sample_HP:
+        sample_HP_path = './data/ground_truth/sample_HP/sample_HP.shp'
+        df_HP, polygons_HP, _ = \
+            prepare_HP_data(logger=logger, img_dir=img_dir, sample_HP_path=sample_HP_path, smooth=smooth,
+                            engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
+                            fill_missing=fill_missing, check_missing=check_missing, composite_by=composite_by)
+
     # prepare train and validation dataset
     df_tv, meta, feature_names, polygons, _ = \
         prepare_data(logger=logger, dataset='train_val', feature_dir=feature_dir, window=None,
                      label_path='./data/ground_truth/train_labels/train_labels.shp', smooth=smooth,
                      engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
-                     fill_missing=fill_missing, check_missing=check_missing,
-                     vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='cropland')
+                     fill_missing=fill_missing, check_missing=check_missing, composite_by=composite_by,
+                     vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='cropland',
+                     vis_afterprocess=args.vis_afterprocess)
     n_feature = len(feature_names)
-    cat_mask = df_tv.cat_mask.values
     df_train_val, x_train_val, y_train_val = \
         get_valid_cropland_x_y(logger, df=df_tv, n_feature=n_feature, dataset='train_val')
     coords_train_val = gpd.GeoDataFrame({'geometry': df_train_val.coords.values})
@@ -145,12 +156,12 @@ def cropland_classification(args):
         pickle.dump(best_estimator, open(f'./models/{log_time}_{model_name}.pkl', 'wb'))
 
         # predict and evaluation
-        test(logger, best_estimator, x_train_val, y_train_val, meta, df_train_val.index, cat_mask=cat_mask,
+        test(logger, best_estimator, x_train_val, y_train_val, meta, df_train_val.index,
              pred_name=f'{log_time}_{model_name}_labels', ancillary_dir=ancillary_dir, feature_names=None,
              region_indicator='./data/ground_truth/train_labels/train_labels.shp', color_by_height=color_by_height)
         if not predict_labels_only:
             x = df_tv.loc[:, feature_names]
-            predict(logger, best_estimator, x, meta, cat_mask=cat_mask,
+            predict(logger, best_estimator, x, meta,
                     pred_path=f'./preds/{log_time}_{model_name}.tiff', ancillary_dir=ancillary_dir,
                     region_indicator='./data/ground_truth/train_region/train_region.shp',
                     color_by_height=color_by_height)
@@ -182,6 +193,7 @@ if __name__ == '__main__':
     parser.add_argument('--vis_stack', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)
     parser.add_argument('--vis_cv', type=bool, default=False)
+    parser.add_argument('--vis_afterprocess', type=bool, default=True)
 
     args = parser.parse_args()
 

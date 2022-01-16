@@ -209,9 +209,9 @@ def get_difference_by_band(band_name, n_weeks, bands_array):
     return df_new
 
 
-def get_spatial_features_VIs(logger, new_bands_name, arr):
+def get_spatial_features(logger, bands_name, arr):
     """
-    Get spatial features of only new vegetation indices.
+    Get spatial features of given bands_name. 
 
     Parameters
     ----------
@@ -225,39 +225,7 @@ def get_spatial_features_VIs(logger, new_bands_name, arr):
     -------
 
     """
-    logger.info('Adding spatial features of new bands')
-    height, width, n_new_bands, n_weeks = arr.shape
-    mean_list, std_list = [], []
-    for b in range(n_new_bands):
-        for r in range(height):
-            for c in range(width):
-                neighbors = get_neighbors(arr[:, :, b, :], r, c)
-                mean_list.append(neighbors.mean(axis=(0, 1)))
-                std_list.append(neighbors.std(axis=(0, 1)))
-    df_mean = pd.DataFrame(mean_list, columns=[f'{b}_spat_mean_{w}' for b in new_bands_name for w in range(n_weeks)])
-    df_std = pd.DataFrame(std_list, columns=[f'{b}_spat_std_{w}' for b in new_bands_name for w in range(n_weeks)])
-    df = pd.concat([df_mean, df_std], axis=1)
-    logger.info(f"  ok, {df.shape[1]} spatial features are added.")
-    return df
-
-
-def get_spatial_features_all(logger, bands_name, arr):
-    """
-    Get spatial features of all bands and vegetation indices.
-
-    Parameters
-    ----------
-    logger
-    bands_name: list
-        A list of bands name.
-    arr: np.array
-        shape (height, width, n_new_bands, n_weeks)
-
-    Returns
-    -------
-
-    """
-    logger.info('Adding all spatial features')
+    logger.info(f'Adding spatial features of {bands_name}')
     height, width, _, n_weeks = arr.shape
     df = pd.DataFrame()
     for i, b in enumerate(bands_name):
@@ -267,8 +235,8 @@ def get_spatial_features_all(logger, bands_name, arr):
                 neighbors = get_neighbors(arr[:, :, i, :], r, c)
                 mean_list.append(neighbors.mean(axis=(0, 1)))
                 std_list.append(neighbors.std(axis=(0, 1)))
-        df_mean = pd.DataFrame(mean_list, columns=[b + '_spat_mean_' + str(w) for w in range(n_weeks)])
-        df_std = pd.DataFrame(std_list, columns=[b + '_spat_std_' + str(w) for w in range(n_weeks)])
+        df_mean = pd.DataFrame(mean_list, columns=[f'{b}_spat_mean_{w}' for w in range(n_weeks)])
+        df_std = pd.DataFrame(std_list, columns=[f'{b}_spat_std_{w}' for w in range(n_weeks)])
         df = pd.concat([df, df_mean, df_std], axis=1)
     logger.info(f"  ok, {df.shape[1]} spatial features are added.")
     return df

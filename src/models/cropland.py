@@ -10,7 +10,7 @@ from src.evaluation.evaluate import evaluate_by_gfsad, evaluate_by_copernicus, \
 from src.evaluation.util import adjust_raster_size
 
 
-def test(logger, model, x_test, y_test, meta, index, cat_mask,
+def test(logger, model, x_test, y_test, meta, index,
          pred_name, ancillary_dir, color_by_height,
          region_indicator=None, feature_names=None):
     """
@@ -28,8 +28,6 @@ def test(logger, model, x_test, y_test, meta, index, cat_mask,
         meta information
     index: np.array
         shape (n_test, )
-    cat_mask: np.array
-        shape (n_data)
     pred_name: str
         filename to save prediction
     ancillary_dir: str
@@ -51,7 +49,8 @@ def test(logger, model, x_test, y_test, meta, index, cat_mask,
     y_test_pred_converted = convert_partial_predictions(y_test_pred, index, meta['height'] * meta['width'])
     # save prediction
     pred_path = f'./preds/{pred_name}.tiff'
-    save_predictions_geotiff(y_test_pred_converted, meta, pred_path, cat_mask, region_indicator, color_by_height)
+    save_predictions_geotiff(y_test_pred_converted, pred_path, meta,
+                             region_indicator=region_indicator, color_by_height=color_by_height)
     logger.info(f'Saved predictions to {pred_path}')
     # evaluate
     logger.info('Evaluating by metrics...')
@@ -66,9 +65,8 @@ def test(logger, model, x_test, y_test, meta, index, cat_mask,
         evaluate_by_feature_importance(model['classification'], x_test, y_test, feature_names, pred_name)
 
 
-def predict(logger, model, x, meta, cat_mask,
-            pred_path, ancillary_dir, color_by_height,
-            region_indicator=None, eval_open=True):
+def predict(logger, model, x, meta, pred_path, ancillary_dir,
+            region_indicator=None, color_by_height=False, hm_name='height_map', eval_open=True):
     """
     Make prediction of the cropland model, usually a whole area.
 
@@ -79,17 +77,17 @@ def predict(logger, model, x, meta, cat_mask,
     x: np.array
         shape (n_data, n_feature)
     meta: dict
-        meta data
-    cat_mask: np.array
-        shape (n_data, n_fetaure)
+        meta data of tiff
     pred_path: str
         path to store predictions, usually at N drive
     ancillary_dir: str
         directory of ancillary data
-    color_by_height: bool
-        whether to add a band with colored mask
     region_indicator: str or rasterio.window.Window or None
         an indicator of the area to predict
+    color_by_height: bool
+        whether to add a band with colored mask
+    hm_name: str
+        height map name to save
     eval_open: bool
         whether to evaluate by open datasets.
 
@@ -100,8 +98,8 @@ def predict(logger, model, x, meta, cat_mask,
     logger.info("## Predicting")
     y_pred = model.predict(x)
     # save prediction
-    save_predictions_geotiff(y_pred, meta, pred_path, cat_mask,
-                             region_indicator=region_indicator, color_by_height=color_by_height)
+    save_predictions_geotiff(y_pred, pred_path, meta, region_indicator=region_indicator,
+                             color_by_height=color_by_height, hm_name=hm_name)
     logger.info(f'Saved predictions to {pred_path}')
     # evaluate 
     if eval_open:

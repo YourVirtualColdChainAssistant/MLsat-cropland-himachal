@@ -1,9 +1,10 @@
+import os
 import rasterio
 from src.evaluation.util import adjust_raster_size
 
 
-def save_predictions_geotiff(predictions, meta_src, save_path, cat_mask,
-                             region_indicator=None, color_by_height=False):
+def save_predictions_geotiff(predictions, save_path, meta,
+                             region_indicator=None, color_by_height=False, hm_name='height_map'):
     """
     Save predictions into .tiff file.
 
@@ -11,50 +12,45 @@ def save_predictions_geotiff(predictions, meta_src, save_path, cat_mask,
     ----------
     predictions: np.array
         shape (height * width, )
-    meta_src: dict
-        source meta data.
     save_path: str
         path to save .tiff
-    cat_mask: np.array
-        shape (height * width, )
+    meta: dict
+        meta data to save .tiff
     region_indicator: str or rasterio.window.Window
         an indicator about the region to save.
     color_by_height: bool
         Whether add a band of mask colored by height.
+    hm_name: str
+        height map file name to save
 
     Returns
     -------
     None
     """
-    color_map = {0: (0, 0, 0), 2: (154, 205, 50)}
-    # color_map_2 = {0: (0, 0, 0), 1: (255, 255, 255), 2: (0, 0, 255), 3: (0, 255, 0)}
-    # color_map_3 = {-9999: (0,0,0), -9998: (0, 0, 0), 0: (255, 255, 255), 3000: (255, 0, 0)}
-    out_meta = meta_src.copy()
     if color_by_height:
         # relative path of altitude data
         height_map_path = '../../../Data/layers_india/ancilliary_data/elevation/IND_alt.vrt'
-        adjust_raster_size(height_map_path, './data/open_datasets/height_map.tiff',
-                           region_indicator=region_indicator, meta=meta_src, label_only=False)
-        with rasterio.open('./data/open_datasets/height_map.tiff') as f:
+        # TODO: dimension of adjusted raster doesn't match, so input full_len and correct meta should be better
+        adjust_raster_size(height_map_path, f'./data/open_datasets/{hm_name}.tiff',
+                           region_indicator=region_indicator, meta=meta, label_only=False)
+        with rasterio.open(f'./data/open_datasets/{hm_name}.tiff') as f:
             height_map = f.read(1).reshape(-1)
         height_map[predictions != 2] = -9998
         with rasterio.Env():
             # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
-            out_meta.update(dtype=rasterio.int16, count=3)
-            with rasterio.open(save_path, 'w', **out_meta) as dst:
+            meta.update(dtype=rasterio.int16, count=1)
+            with rasterio.open(save_path, 'w', **meta) as dst:
                 # reshape into (band, height, width)
-                dst.write_band(1, predictions.reshape(out_meta['height'], out_meta['width']).astype(rasterio.int16))
-                dst.write_band(2, cat_mask.reshape(out_meta['height'], out_meta['width']).astype(rasterio.int16))
-                dst.write_band(3, height_map.reshape(out_meta['height'], out_meta['width']).astype(rasterio.int16))
-                dst.write_colormap(1, color_map)
+                dst.write(height_map.reshape(meta['height'], meta['width']).astype(rasterio.int16), indexes=1)
+        os.remove(f'./data/open_datasets/{hm_name}.tiff')
     else:
+        color_map = {0: (0, 0, 0), 2: (154, 205, 50)}
         with rasterio.Env():
             # Write an array as a raster band to a new 8-bit file. We start with the profile of the source
-            out_meta.update(dtype=rasterio.uint8, count=2)
-            with rasterio.open(save_path, 'w', **out_meta) as dst:
+            meta.update(dtype=rasterio.uint8, count=1)
+            with rasterio.open(save_path, 'w', **meta) as dst:
                 # reshape into (band, height, width)
-                dst.write(predictions.reshape(out_meta['height'], out_meta['width']), 1)
-                dst.write(cat_mask.reshape(out_meta['height'], out_meta['width']), 2)
+                dst.write(predictions.reshape(meta['height'], meta['width']), indexes=1)
                 dst.write_colormap(1, color_map)
 
 

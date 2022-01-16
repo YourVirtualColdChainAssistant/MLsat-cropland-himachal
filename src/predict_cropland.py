@@ -7,6 +7,7 @@ import datetime
 import argparse
 import numpy as np
 import multiprocessing
+import rasterio
 from rasterio.windows import Window
 from rasterio.merge import merge
 
@@ -56,11 +57,14 @@ def cropland_predict(args):
         best_estimator = pickle.load(open(f'./models/{pretrained}.pkl', 'rb'))
 
         # read and predict in patches
-        full_len, n_patch = 10800, 10
+        with rasterio.open(predict_dir + os.listdir(predict_dir)[0], 'r') as f:
+            tile_meta = f.meta
+        full_len, n_patch = tile_meta['height'], 10
         patch_len = int(full_len / n_patch)
+        logger.info(f'Tile size: {full_len}x{full_len}, num / side: {n_patch}, side size: {patch_len}')
 
         # check path existence
-        pred_path_top = f'{img_dir}predictions/{args.tile_id}/'
+        pred_path_top = f'{img_dir}predictions/{pretrained}/{args.tile_id}/'
         if not os.path.isdir(pred_path_top):
             os.makedirs(pred_path_top)
 
@@ -77,15 +81,15 @@ def cropland_predict(args):
                                  label_path=None, window=window, smooth=smooth,
                                  engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
                                  fill_missing=fill_missing, check_missing=check_missing,
-                                 vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='cropland')
+                                 vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='cropland',
+                                 vis_afterprocess=args.vis_afterprocess)
                 # get x data
-                cat_mask = df.cat_mask.values
                 x = df.loc[:, feature_names]
                 logger.info(f'df.shape {df.shape}, x.shape {x.shape}')
                 # predict
                 pred_path = pred_path_top + str(row) + '_' + str(col) + '.tiff'
-                predict(logger, best_estimator, x, meta, cat_mask,
-                        pred_path=pred_path, ancillary_dir=ancillary_dir,
+                predict(logger, best_estimator, x, meta=meta, pred_path=pred_path,
+                        ancillary_dir=ancillary_dir, hm_name=f'{args.tile_id}_{row}_{col}',
                         color_by_height=color_by_height, region_indicator=window, eval_open=False)
 
         # merge patches into single raster
@@ -111,15 +115,15 @@ def cropland_predict(args):
                              label_path=label_path, window=None, smooth=smooth,
                              engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
                              fill_missing=fill_missing, check_missing=check_missing,
-                             vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='cropland')
+                             vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='cropland',
+                             vis_afterprocess=args.vis_afterprocess)
             n_feature = len(feature_names)
-            cat_mask = df_te.cat_mask.values
             df_test, x_test, y_test = \
                 get_valid_cropland_x_y(logger, df=df_te, n_feature=n_feature, dataset=f'test_{district}')
             # test
             for p in pretrained:
                 best_estimator = pickle.load(open(f'./models/{p}.pkl', 'rb'))
-                test(logger, best_estimator, x_test, y_test, meta, index=df_test.index, cat_mask=cat_mask,
+                test(logger, best_estimator, x_test, y_test, meta, index=df_test.index,
                      pred_name=f'{p}_{district}', ancillary_dir=ancillary_dir, feature_names=None,
                      region_indicator=label_path, color_by_height=color_by_height)
 
@@ -127,12 +131,13 @@ def cropland_predict(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config_filename', type=str,
-                        default='./data/config/cropland_workstation.yaml')
+                        default='./data/config/cropland_best.yaml')
 
-    parser.add_argument('--tile_ids', nargs='+', default=['43RGQ'])
-    parser.add_argument('--test_regions', type=bool, default=True)
+    parser.add_argument('--tile_ids', nargs='+', default=['43SFR'])
+    parser.add_argument('--test_regions', type=bool, default=False)
     parser.add_argument('--vis_stack', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)
+    parser.add_argument('--vis_afterprocess', type=bool, default=False)
 
     args = parser.parse_args()
 

@@ -2,7 +2,7 @@ data:
   img_dir: /mnt/N/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/
   ancillary_dir: /home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/
 train:
-  cv_type:  block
+  cv_type: 
   tiles_x: 4
   tiles_y: 4
   shape: square
@@ -10,7 +10,6 @@ train:
   n_fold: 3
   random_state: 24
   hp_search_by: grid
-  sample_HP: False
 model:
   composite_by: max
   fill_missing: linear
@@ -22,7 +21,7 @@ model:
   smooth: False
   check_SAC: False
   models_name: ['rfc']
-  pretrained: ['20220115-163005_rfc']
+  pretrained: 20220105-135132_rfc
 predict:
   predict_labels_only: False
   color_by_height: True
