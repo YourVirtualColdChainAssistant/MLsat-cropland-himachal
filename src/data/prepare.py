@@ -3,13 +3,16 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 from scipy import interpolate
+import pyproj
+import shapely
 import rasterio
 from rasterio.windows import Window
+from scipy.sparse import data
 
 from src.data.load import load_geotiff
 from src.data.stack import stack_timestamps
 from src.data.engineer import add_vegetation_indices, get_temporal_features_every_n_weeks, get_statistical_features, \
-    get_diff_features, get_spatial_features_VIs, get_spatial_features_all
+    get_diff_features, get_spatial_features
 from src.utils.util import count_classes, load_shp_to_array
 from src.evaluation.visualize import plot_timestamps, plot_profile
 
@@ -17,8 +20,8 @@ from src.evaluation.visualize import plot_timestamps, plot_profile
 def prepare_data(logger, dataset, feature_dir, label_path, window=None,
                  scaling='as_integer', smooth=False,
                  engineer_feature=None, new_bands_name=['ndvi'],
-                 way='weekly', fill_missing='forward', check_missing=False,
-                 vis_stack=False, vis_profile=False, vis_profile_type='cropland'):
+                 way='weekly', fill_missing='forward', check_missing=False, composite_by='max',
+                 vis_stack=False, vis_profile=False, vis_profile_type='cropland', vis_afterprocess=False):
     """
     A pipeline to prepare data. The full process includes:
     - load raw bands
@@ -61,6 +64,8 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
         choices = [None, 'forward', 'linear']
     check_missing: bool
         Check missing value percentage or not.
+    composite_by: str
+        choices = [max, median]
     vis_stack: bool
         Visualize timestamps or not.
     vis_profile: bool
@@ -75,37 +80,28 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
     # load raw bands
     logger.info(f'# Stack timestamps {way}')
     if not isinstance(window, Window):
-        meta, window, descriptions = get_meta_window_descriptions(feature_dir, label_path)
+        meta, window, descriptions = get_meta_window_descriptions(
+            feature_dir, label_path)
     else:
         meta, descriptions = get_meta_descriptions(feature_dir, window)
-    read_as = 'as_integer' if 'as' not in scaling else scaling
-    bands_array, cat_pixel, meta, timestamps_raw, timestamps_weekly_ref = \
-        stack_timestamps(logger, feature_dir, meta, descriptions, window, read_as=read_as,
-                         way=way, check_missing=check_missing)
 
-    bands_name = list(descriptions)
-    bands_name.remove('cloud mask')
-    if fill_missing:
-        # TODO: fill according to --predict_train to save computational cost 
-        logger.info(f"# Handle missing data by {fill_missing} filling")
-        bands_array = handle_missing_data(bands_array, fill_missing, missing_val=0)
-    if smooth:
-        logger.info('# Smooth raw bands')
-        bands_array = smooth_raw_bands(bands_array)
-    if vis_stack:
-        logger.info('# Visualize timestamp stacking')
-        plot_timestamps(timestamps_raw, None, f'./figs/timestamps_raw_{dataset}.png')
-        plot_timestamps(timestamps_weekly_ref, None, f'./figs/timestamps_{way}_{dataset}.png')
-
-    logger.info('# Build features')
-    if new_bands_name:
-        bands_array = add_vegetation_indices(logger, bands_array, descriptions, new_bands_name)
-        bands_name += new_bands_name
-        meta.update(count=meta['count'] - 1 + len(new_bands_name))
-    df = build_features(logger, bands_array, engineer_feature, bands_name=bands_name)
-    feature_names = df.columns
-    logger.info(f'\nFeatures: {feature_names}')
-    df['cat_mask'] = cat_pixel
+    df, bands_array, meta, feature_names, bands_name, timestamps_weekly_ref = \
+        prepare_x(logger, dataset, feature_dir, window, meta, descriptions,
+                  scaling=scaling, smooth=smooth,
+                  engineer_feature=engineer_feature, new_bands_name=new_bands_name,
+                  way=way, fill_missing=fill_missing, check_missing=check_missing,
+                  vis_stack=vis_stack, composite_by=composite_by)
+    
+    if vis_afterprocess:
+        meta_out = meta.copy()
+        meta_out.update({'dtype': rasterio.float32})  # TODO: check what to update 
+        for w in range(len(timestamps_weekly_ref)):
+            save_path = './figs/after_process/'
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            with rasterio.open(save_path + 'week_' + str(w) + '.tiff', 'w', **meta_out) as f:
+                f.write(np.transpose(bands_array[:, :, :, w], (2, 0, 1)))
+        logger.info(f'Saved images after process to {save_path}')
 
     if 'predict' not in dataset:
         # get y
@@ -129,7 +125,8 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
                 else:
                     name = f"{b.upper()}_{way}_profile_{dataset}_cropland"
                     name_s = f"{b.upper()}_smoothed_{way}_profile_{dataset}_{vis_profile_type}"
-                    b_arr_smoothed = smooth_raw_bands(np.expand_dims(b_arr.copy(), axis=2))
+                    b_arr_smoothed = smooth_raw_bands(
+                        np.expand_dims(b_arr.copy(), axis=2))
                     plot_profile(data=b_arr_smoothed.reshape(-1, len(timestamps_weekly_ref)),
                                  label=df.label.values, timestamps=timestamps_weekly_ref, type=vis_profile_type,
                                  veg_index=b, title=name_s.replace('_', ' '), save_path=f"./figs/{name_s}.png")
@@ -141,6 +138,93 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
     else:
         logger.info('ok')
         return df, meta, feature_names
+
+
+def prepare_HP_data(logger, img_dir, sample_HP_path,
+                    smooth, engineer_feature, scaling, new_bands_name,
+                    fill_missing, check_missing, composite_by):
+    sample = gpd.read_file(sample_HP_path)
+    # sample_shp = sample_shp.to_crs(meta.crs)
+
+    df_list = list()
+    for _, row in sample.iterrows():
+        label, tile_id, poly = row['id'], row['tile'], row['geometry']
+        feature_dir = img_dir + tile_id + '/raster/'
+        with rasterio.open(feature_dir + os.listdir(feature_dir)[0], 'r') as f:
+            meta_tile = f.meta
+        # TODO: meta_tile and poly.bounds inconsistency
+        # TODO: poly.buffer()
+        project = pyproj.Transformer.from_proj(sample.crs, meta_tile['crs'], always_xy=True)
+        poly = shapely.ops.transform(project.transform, poly)
+        window = get_window(meta_tile['transform'], poly.bounds)
+        meta, descriptions = get_meta_descriptions(feature_dir, window)
+
+        df_tile, _, meta, _, _, _ = \
+            prepare_x(logger, 'train_val', feature_dir, window, meta, descriptions,
+                      scaling=scaling, smooth=smooth,
+                      engineer_feature=engineer_feature, new_bands_name=new_bands_name,
+                      fill_missing=fill_missing, check_missing=check_missing, composite_by=composite_by)
+
+        logger.info('# Load raw labels')
+        df_tile['label'] = label
+        logger.info('# Convert to cropland and crop labels')
+        df_tile['gt_cropland'] = df_tile.label.values.copy()
+        df_tile.loc[df_tile.label.values == 1, 'gt_cropland'] = 2
+
+        # add coordinates
+        logger.info('# Add coordinates')
+        df_tile['coords'] = construct_coords(meta)
+
+        # Add
+        df_list.append(df_tile)
+    df = pd.concat(df_list, axis=0)
+
+    val_list = list(sample.id.values)
+    features_list = [shapely.geometry.mapping(s) for s in sample.geometry]
+
+    return df, features_list, val_list
+
+
+def prepare_x(logger, dataset, feature_dir, window, meta, descriptions,
+              scaling='as_integer', smooth=False,
+              engineer_feature=None, new_bands_name=['ndvi'],
+              way='weekly', fill_missing='forward', check_missing=False,
+              vis_stack=False, composite_by='max'):
+    read_as = 'as_integer' if 'as' not in scaling else scaling
+    bands_array, cat_pixel, meta, timestamps_raw, timestamps_weekly_ref = \
+        stack_timestamps(logger, feature_dir, meta, descriptions, window, read_as=read_as,
+                         way=way, check_missing=check_missing, composite_by=composite_by)
+
+    bands_name = list(descriptions)
+    bands_name.remove('cloud mask')
+    if fill_missing:
+        # TODO: fill according to --predict_train to save computational cost
+        logger.info(f"# Handle missing data by {fill_missing} filling")
+        bands_array = handle_missing_data(
+            bands_array, fill_missing, missing_val=0)
+    if smooth:
+        logger.info('# Smooth raw bands')
+        bands_array = smooth_raw_bands(bands_array)
+    if vis_stack:
+        logger.info('# Visualize timestamp stacking')
+        plot_timestamps(timestamps_raw, None,
+                        f'./figs/timestamps_raw_{dataset}.png')
+        plot_timestamps(timestamps_weekly_ref, None,
+                        f'./figs/timestamps_{way}_{dataset}.png')
+
+    logger.info('# Build features')
+    if new_bands_name:
+        bands_array = add_vegetation_indices(
+            logger, bands_array, descriptions, new_bands_name)
+        bands_name += new_bands_name
+        meta.update(count=meta['count'] + len(new_bands_name))
+    df = build_features(logger, bands_array,
+                        engineer_feature, bands_name=bands_name)
+    feature_names = df.columns
+    logger.info(f'\nFeatures: {feature_names}')
+    df['cat_mask'] = cat_pixel
+
+    return df, bands_array, meta, feature_names, bands_name, timestamps_weekly_ref
 
 
 def handle_missing_data(arr, fill_missing, missing_val=0):
@@ -211,7 +295,8 @@ def linear_interpolation(arr, missing_val=0):
         y, mask = arr[i, :], mask_arr[i, :]
         if mask.sum() < mask.shape[0] - 1:
             x = np.arange(y.shape[0])
-            f = interpolate.interp1d(x[~mask], y[~mask], fill_value='extrapolate')
+            f = interpolate.interp1d(
+                x[~mask], y[~mask], fill_value='extrapolate')
             arr[i, mask] = f(x[mask])
         elif mask.sum() == mask.shape[0] - 1:
             arr[i, :] = y[~mask]
@@ -225,7 +310,8 @@ def get_missing_values_mask(arr, missing_val):
     elif missing_val == np.nan:
         mask = np.isnan(arr)
     else:
-        raise ValueError(f'No such missing value indicator. Choose from any float / any int / np.nan.')
+        raise ValueError(
+            f'No such missing value indicator. Choose from any float / any int / np.nan.')
     return mask
 
 
@@ -247,7 +333,8 @@ def smooth_raw_bands(bands_array):
     for h in range(height):
         for w in range(width):
             for b in range(n_bands):
-                bands_array[h, w, b, :] = smooth_func(bands_array[h, w, b, :], 10)
+                bands_array[h, w, b, :] = smooth_func(
+                    bands_array[h, w, b, :], 10)
     return bands_array
 
 
@@ -281,31 +368,39 @@ def build_features(logger, bands_array, engineer_feature, bands_name):
     height, width, n_bands, n_weeks = bands_array.shape
     bands_array = bands_array.reshape(height * width, n_bands, n_weeks)
     if engineer_feature:
-        df = get_temporal_features_every_n_weeks(logger, bands_name, n_weeks, bands_array, n=4)
+        df = get_temporal_features_every_n_weeks(
+            logger, bands_name, n_weeks, bands_array, n=4)
         df_list = list()
         df_list.append(df)
         # statistics
-        df_list.append(get_statistical_features(logger, bands_name, bands_array))
+        df_list.append(get_statistical_features(
+            logger, bands_name, bands_array))
         # difference of two successive timestamps
-        df_list.append(get_diff_features(logger, bands_name[4:], n_weeks, bands_array[:, 4:, :]))
+        df_list.append(get_diff_features(
+            logger, bands_name[4:], n_weeks, bands_array[:, 4:, :]))
         if engineer_feature == 'select' or engineer_feature == 'temporal+spatial':
             bands_array = bands_array.reshape(height, width, n_bands, n_weeks)
-            df_list.append(get_spatial_features_all(logger, bands_name, bands_array))
+            df_list.append(get_spatial_features(
+                logger, bands_name, bands_array))
         elif engineer_feature == 'temporal+ndvi_spatial':
             bands_array = bands_array.reshape(height, width, n_bands, n_weeks)
-            df_list.append(get_spatial_features_VIs(logger, bands_name[4:], bands_array[:, :, 4:, :]))
+            df_list.append(get_spatial_features(
+                logger, bands_name[4:], bands_array[:, :, 4:, :]))
         # concatenate
         df = pd.concat(df_list, axis=1)
     else:  # engineer_feature = None
-        df = get_temporal_features_every_n_weeks(logger, bands_name, n_weeks, bands_array, n=1)
+        df = get_temporal_features_every_n_weeks(
+            logger, bands_name, n_weeks, bands_array, n=1)
     logger.info(f'  df.shape={df.shape}')
     return df
 
 
 def construct_coords(meta):
     height, width = meta['height'], meta['width']
-    minx, maxy = rasterio.transform.xy(meta['transform'], 0, 0)  # (691375.0, 3571325.0)
-    maxx, miny = rasterio.transform.xy(meta['transform'], height, width)  # (709645.0, 3544635.0)
+    minx, maxy = rasterio.transform.xy(
+        meta['transform'], 0, 0)  # (691375.0, 3571325.0)
+    maxx, miny = rasterio.transform.xy(
+        meta['transform'], height, width)  # (709645.0, 3544635.0)
     xs = np.tile(np.linspace(minx, maxx, width, endpoint=False), reps=height)
     ys = np.linspace(maxy, miny, height, endpoint=False).repeat(width)
     xys = gpd.GeoSeries(gpd.points_from_xy(xs, ys))
