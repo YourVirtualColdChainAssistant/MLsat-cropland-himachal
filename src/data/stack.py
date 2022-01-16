@@ -11,7 +11,7 @@ from src.data.load import load_geotiff
 
 
 def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as='as_integer',
-                     way='weekly', check_missing=False):
+                     way='weekly', check_missing=False, composite_by='max'):
     """
     Stack all the timestamps in from_dir folder, ignoring all black images.
 
@@ -30,9 +30,14 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
         A list of band name.
     window: rasterio.window.Window or None
         The window to load images.
-    read_as: choices = [as_integer, as_float, as_reflectance]
-    way: [raw, weekly, monthly]
+    read_as: str
+        choices = [as_integer, as_float, as_reflectance]
+    way: str 
+        [raw, weekly, monthly]
     check_missing: bool
+        whether check missing value percentage 
+    composite_by: str
+        choices = [max, median]
 
     Returns
     -------
@@ -64,9 +69,7 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
             for id in ids:
                 # read band
                 raster_path = from_dir + filenames[id]
-                print('Before loading data:', datetime.datetime.now())
                 band, _ = load_geotiff(raster_path, window, read_as)
-                print('After loading data:', datetime.datetime.now())
                 cat_mask = categorize_scene_classification(band[idx_cloud])
                 band = np.stack(band, axis=2)[:, :, idx_other]
                 # pixel values check
@@ -79,7 +82,7 @@ def stack_timestamps(logger, from_dir, meta, descriptions, window=None, read_as=
         # stack by index
         if len(band_list) != 0:
             # merge images of a period by taking max
-            band_list, cat_mask_list = get_cloudless(band_list, cat_mask_list)
+            band_list, cat_mask_list = get_cloudless(band_list, cat_mask_list, composite_by)
             # check gaps
             n_zero = (band_list[:, 0] == 0).sum()
             n_nodata = (cat_mask_list == 0).sum()
@@ -194,7 +197,7 @@ def categorize_scene_classification(scene):
     return cat_mask
 
 
-def get_cloudless(band_list, cat_mask_list):
+def get_cloudless(band_list, cat_mask_list, composite_by='max'):
     """
     Get cloudless bands from possibly multiple bands.
 
@@ -204,22 +207,29 @@ def get_cloudless(band_list, cat_mask_list):
         shape (height * width, n_band)
     cat_mask_list: A list of nd.array
         shape (height * width, )
+    by: str
+        choices = [max, median]
 
     Returns
     ----------
     band_cloudless: np.array
-        shape ()
+        shape (height * width, n_band)
     cat_mask_cloudless: np.array
         shape (height * width, )
     """
-    band_stacked = np.stack(band_list, axis=2)
-    cat_mask_stacked = np.stack(cat_mask_list, axis=1)
+    band_stacked = np.stack(band_list, axis=2)  # (height * width, n_band, n_comp)
+    cat_mask_stacked = np.stack(cat_mask_list, axis=1)  # (height * width, n_comp)
     cat_mask_cloudless = cat_mask_stacked.max(axis=1)
-    # get cloudless by taking max
-    cloudy_mask = (cat_mask_cloudless == 1)
-    argmax = cat_mask_stacked.argmax(axis=1)
-    band_cloudless = band_stacked[np.arange(argmax.shape[0]), :, argmax]
+    if composite_by == 'max':
+        # get cloudless mask by taking max
+        argmax = cat_mask_stacked.argmax(axis=1)
+        band_cloudless = band_stacked[np.arange(argmax.shape[0]), :, argmax]
+    elif composite_by == 'median':
+        band_cloudless = np.median(band_stacked, axis=2)
+    else:
+        raise ValueError(f'No such {composite_by} way to get cloudless.')
     # fill cloudy data as 0 for further processing
+    cloudy_mask = (cat_mask_cloudless == 1)
     band_cloudless[cloudy_mask] = 0
     return band_cloudless, cat_mask_cloudless
 
