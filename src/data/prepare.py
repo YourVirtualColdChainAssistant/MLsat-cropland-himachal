@@ -94,7 +94,7 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
     
     if vis_afterprocess:
         meta_out = meta.copy()
-        meta_out.update({'dtype': rasterio.float32})  # TODO: check what to update 
+        meta_out.update({'dtype': rasterio.float32})  # TODO: check update 
         for w in range(len(timestamps_weekly_ref)):
             save_path = './figs/after_process/'
             if not os.path.exists(save_path):

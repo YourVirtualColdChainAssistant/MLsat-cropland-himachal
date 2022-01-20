@@ -13,15 +13,14 @@ def adjust_raster_size(dataset_path, out_path, region_indicator, meta, label_onl
     if isinstance(region_indicator, str):
         region_shp = gpd.read_file(region_indicator).to_crs(meta['crs'])
         minx, miny, maxx, maxy = region_shp.total_bounds
-        box_shp = gpd.GeoDataFrame({'geometry': shapely.geometry.box(minx, miny, maxx, maxy)}, index=[0])
-        box_shp = box_shp.set_crs(meta['crs'])
     elif isinstance(region_indicator, Window):
-        minx, miny, maxx, maxy = rasterio.windows.bounds(region_indicator, meta['transform'])
-        box_shp = gpd.GeoDataFrame({'geometry': shapely.geometry.box(minx, miny, maxx, maxy)}, index=[0])
-        box_shp = box_shp.set_crs(meta['crs'])
+        window = Window(0, 0, region_indicator.height, region_indicator.width)
+        minx, miny, maxx, maxy = rasterio.windows.bounds(window, meta['transform'])
     else:
         raise ValueError(f'Cannot adjust raster size by {region_indicator}')
-    inter_path = out_path.replace(out_path.split('_')[-1], 'intermediate_result.tiff')
+    box_shp = gpd.GeoDataFrame({'geometry': shapely.geometry.box(minx, miny, maxx, maxy)}, index=[0])
+    box_shp = box_shp.set_crs(meta['crs'])
+    inter_path = out_path.replace('.tiff', '_intermediate_result.tiff')
     clip_raster_to_shp(dataset_path, inter_path, box_shp)
     # align with same resolution
     align_raster(inter_path, out_path, meta, (minx, miny, maxx, maxy))

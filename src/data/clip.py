@@ -48,7 +48,7 @@ def clip_single_raster(shapes, geotiff_path, clip_path):
     """
     # read imagery file
     with rasterio.open(geotiff_path) as src:
-        out_image, out_transform = mask(src, shapes, crop=True)
+        out_image, out_transform = mask(src, shapes, crop=True, all_touched=True)
         out_meta = src.meta
 
     # Save clipped imagery

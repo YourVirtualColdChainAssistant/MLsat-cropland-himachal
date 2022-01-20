@@ -137,7 +137,7 @@ def cropland_classification(args):
             pipe = get_pipeline(model, scaling, study_scaling=study_scaling, engineer_feature=engineer_feature)
             logger.info(pipe)
             # search hyperparameters
-            search = GridSearchCV(estimator=pipe, param_grid=params_grid, cv=cv, verbose=3, n_jobs=-1)
+            search = GridSearchCV(estimator=pipe, param_grid=params_grid, scoring='accuracy', cv=cv, verbose=3, n_jobs=-1)
             search.fit(x_train_val, y_train_val)
             # best parameters
             logger.info(f"Best score {search.best_score_:.4f} with best parameters: {search.best_params_}")
@@ -193,7 +193,7 @@ if __name__ == '__main__':
     parser.add_argument('--vis_stack', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)
     parser.add_argument('--vis_cv', type=bool, default=False)
-    parser.add_argument('--vis_afterprocess', type=bool, default=True)
+    parser.add_argument('--vis_afterprocess', type=bool, default=False)
 
     args = parser.parse_args()
 

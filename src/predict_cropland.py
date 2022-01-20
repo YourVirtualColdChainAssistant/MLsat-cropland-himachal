@@ -73,7 +73,7 @@ def cropland_predict(args):
             for col in np.linspace(0, full_len, n_patch, endpoint=False, dtype=int):
                 # get window
                 window = Window(col, row, patch_len, patch_len)  # (col_off, row_off, width, height)
-                logger.info(f'==== Preparing for {window} ====')
+                logger.info(f'==== Preparing for {args.tile_id} {window} ====')
 
                 # prepare data
                 df, meta, feature_names = \
@@ -89,13 +89,13 @@ def cropland_predict(args):
                 # predict
                 pred_path = pred_path_top + str(row) + '_' + str(col) + '.tiff'
                 predict(logger, best_estimator, x, meta=meta, pred_path=pred_path,
-                        ancillary_dir=ancillary_dir, hm_name=f'{args.tile_id}_{row}_{col}',
+                        ancillary_dir=ancillary_dir, hm_name=f'hm_{args.tile_id}_{row}_{col}',
                         color_by_height=color_by_height, region_indicator=window, eval_open=False)
 
         # merge patches into single raster
         logger.info('Merging patches...')
         patches_list = [f for f in glob.glob(pred_path_top + '*.tiff')]
-        merge(patches_list, dst_path=pred_path_top + args.tile_id + '.tiff')
+        merge(patches_list, dst_path=pred_path_top + '../' + args.tile_id + '.tiff')
     else:
         if testing:
             test_dir_dict = {'kullu': test_near_dir}
@@ -126,6 +126,7 @@ def cropland_predict(args):
                 test(logger, best_estimator, x_test, y_test, meta, index=df_test.index,
                      pred_name=f'{p}_{district}', ancillary_dir=ancillary_dir, feature_names=None,
                      region_indicator=label_path, color_by_height=color_by_height)
+                # TODO: evaluate by open datasets is not working 
 
 
 if __name__ == '__main__':
