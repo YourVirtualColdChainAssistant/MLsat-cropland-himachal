@@ -74,7 +74,8 @@ The following is a description of the structure of this template repository.
     ├── data                                > Folder with ground truths and ancillary data.
     |   ├── config                          > Folder to hold configuration to use in train and prediction.
     |   |    ├── cropland.yaml              > Configuration file for cropland training and prediction locally. 
-    |   |    ├── cropland_workstation.yaml  > Configuration file for cropland training and prediction in work station. 
+    |   |    ├── cropland_workstation.yaml  > Configuration file for cropland training and prediction in work station.
+    |   |    ├── cropland_best.yaml         > Configuration file of the best setting.  
     |   |    ├── crop_type.yaml             > Configuration file for crop type training and prediction locally. 
     |   |    └── crop_type_workstation.yaml > Configuration file for crop type training and prediction in work station. 
     |   | 
@@ -110,7 +111,9 @@ The following is a description of the structure of this template repository.
         ├── utils                           > Folder contraining all util functionality. 
         |    ├── __init__.py                > Makes this folder an importable python module.
         |    ├── util.py                    > Script of general util functions.
-        |    ├── logger.py                  > Script for generating log file. 
+        |    ├── logger.py                  > Script for generating log file.
+        |    ├── merge_tile.py              > Script for merging multiple tile predictions into single file. 
+        |    ├── output.py                  > Script for formating final outputs by districts from raw merged predictions of all tiles. 
         |    └── scv.py                     > Script for spatial cross validation. 
         |
         ├── __init__.py                     > Makes this folder an importable python module.

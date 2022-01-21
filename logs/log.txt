@@ -1,3 +1,9 @@
+== cropland_20220117-172418_predict
+	* predict "20220105-135132_rfc" on 4 tiles: 43SFR, 43RFQ, 43SGR, 43SGR
+
+
+
+
 == cropland_20220111-094108 (train)
    (test)  [rfc]
 	* another k_tune setting (best = 50)

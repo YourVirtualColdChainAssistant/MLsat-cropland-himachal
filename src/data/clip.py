@@ -38,17 +38,21 @@ def clip_raster(img_dir, clip_from_shp):
     print(f'Clip done!')
 
 
-def clip_single_raster(shapes, geotiff_path, clip_path):
+def clip_single_raster(shapes, geotiff_path, clip_path, updates=None):
     """
 
     :param shapes: geometry of source shapefile
     :param geotiff_path: xx.tiff path
     :param clip_path: output clipped path
+    :param updates: other updates
     :return:
     """
     # read imagery file
     with rasterio.open(geotiff_path) as src:
-        out_image, out_transform = mask(src, shapes, crop=True, all_touched=True)
+        if 'nodata' in updates.keys():
+            out_image, out_transform = mask(src, shapes, crop=True, all_touched=True, nodata=updates['nodata'])
+        else:   
+            out_image, out_transform = mask(src, shapes, crop=True, all_touched=True)
         out_meta = src.meta
 
     # Save clipped imagery
@@ -56,6 +60,10 @@ def clip_single_raster(shapes, geotiff_path, clip_path):
                      "height": out_image.shape[1],
                      "width": out_image.shape[2],
                      "transform": out_transform})
+    if updates:
+        out_meta.update(updates)
+        if 'compress' in updates.keys():
+            clip_path = clip_path.replace('.tiff', '_lzw.tiff')
 
     clip_flag = False
     if out_image.mean() != 0.0:

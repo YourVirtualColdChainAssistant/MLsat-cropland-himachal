@@ -21,9 +21,9 @@ model:
   new_bands_name: ['ndvi']
   smooth: False
   check_SAC: False
-  models_name: ['rfc']
-  pretrained: ['20220115-163005_rfc']
+  models_name: ['rfc', 'svc', 'mlp']
+  pretrained: 
 predict:
-  predict_labels_only: False
+  predict_labels_only: True
   color_by_height: True
   
