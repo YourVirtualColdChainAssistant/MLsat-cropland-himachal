@@ -80,6 +80,20 @@ The following is a description of the structure of this template repository.
     |   |    └── crop_type_workstation.yaml > Configuration file for crop type training and prediction in work station. 
     |   | 
     |   ├── ground_truth                    > Folder to hold ground truth data.
+    |   |    ├── apple_polygons             > Folder to store only apple polygons from survey.
+    |   |    ├── apples                     > Folder to store apple polygons from the first and second surveys.
+    |   |    ├── non_crops                  > Folder to store non-croplands in training area.
+    |   |    ├── other_crops                > Folder to store croplands in training area.
+    |   |    ├── sample_HP                  > Folder to store new samples in whole HP state inspecting from predictions.
+    |   |    ├── test_polygons_near         > Folder to store croplands and non-croplands ground truth in Kullu test region.
+    |   |    ├── test_polygons_far          > Folder to store croplands and non-croplands ground truth in Mandi and Shimla test region.
+    |   |    ├── test_labels_kullu          > Folder to store croplands and non-croplands test gt in Kullu.
+    |   |    ├── test_labels_mandi          > Folder to store croplands and non-croplands test gt in Mandi.
+    |   |    ├── test_labels_shimla         > Folder to store croplands and non-croplands test gt in Shimla.
+    |   |    └── train_labels               > Folder to store croplands and non-croplands train and val gt in Kullu.
+    |   | 
+    |   ├── india_adm                       > Folder to store the administration boundary of India state / districts.
+    |   ├── india_points                    > Folder to store geowiki points
     |   └── open_datasets                   > Folder to hold open datasets.
     ├── figs                                > Folder for keeping the media files in this project. 
     ├── logs                                > Folder for keeping the log data of training and predicting.      
