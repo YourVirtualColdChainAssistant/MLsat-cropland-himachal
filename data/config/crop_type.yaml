@@ -1,6 +1,6 @@
 data:
   img_dir: N:/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/
-  ancilliary_dir: K:/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/
+  ancillary_dir: K:/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/
 train:
   cv_type: block
   tiles_x: 4
@@ -10,7 +10,7 @@ train:
   n_fold: 3
   random_state: 24
   hp_search_by: grid
-  from: scratch
+  train_from: cropland
 model:
   fill_missing: linear
   check_missing: False
@@ -21,7 +21,7 @@ model:
   smooth: False
   check_SAC: False
   models_name: [ 'ocsvm', 'pul', 'pul-w' ]
-  pretrained: [ '20220105-135132_rfc', '20220105-135132_svc', '20220105-135132_mlp' ]
+  pretrained: ['20220111-213339_rfc']
 predict:
-  predict_train: True
+  predict_labels_only: True
   color_by_height: True

@@ -18,7 +18,7 @@ def load_shp_to_array(shp_path, meta):
     img = rasterio.features.rasterize(iterable, out_shape=(meta['height'], meta['width']),
                                       transform=meta['transform'])
     print('  ok')
-    return features_list, val_list, img
+    return features_list, img
 
 
 def convert_gdf_to_shp(data, save_path):

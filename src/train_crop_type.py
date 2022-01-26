@@ -3,11 +3,12 @@ import pickle
 import argparse
 import datetime
 import numpy as np
+import pandas as pd
 import geopandas as gpd
 from sklearn.model_selection import GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 
-from src.data.prepare import prepare_data, get_valid_crop_type_x_y
+from src.data.prepare import prepare_data, get_crop_type_x_y_pos
 from src.models.crop_type import get_model_and_params_dict_grid, get_best_model_initial, test, predict, \
     sample_unlabeled_idx
 from src.models.util import get_pipeline, get_addtional_params
@@ -27,6 +28,7 @@ def classifier_crop_type(args):
     predict_kwargs = config.get('predict')
     # data path kwargs
     img_dir = data_kwargs.get('img_dir')
+    ancillary_dir = data_kwargs.get('ancillary_dir')
     # train kwargs
     cv_type = train_kwargs.get('cv_type')
     tiles_x = train_kwargs.get('tiles_x')
@@ -55,48 +57,67 @@ def classifier_crop_type(args):
     testing = True
     # logger
     log_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    for p in pretrained:
-        log_filename = f'crop_type_{log_time}_on_{p}.log' if not testing else f'crop_type_testing_{log_time}_on_{p}.log'
-        logger = get_logger(get_log_dir('./logs/'), __name__, log_filename, level='INFO')
-        logger.info(config)
 
-        feature_dir = img_dir + '43SFR/raster/' if not testing else img_dir + '43SFR/raster_sample/'
+    log_filename = f'crop_type_{log_time}_on_{pretrained}.log' if not testing else f'crop_type_testing_{log_time}_on_{pretrained}.log'
+    logger = get_logger(get_log_dir('./logs/'), __name__, log_filename, level='INFO')
+    logger.info(config)
 
-        # TODO: do twice to load other train region data
-        # prepare train and validation dataset
-        df_tv, meta, feature_names, polygons, val_list = \
-            prepare_data(logger=logger, dataset='train_val', feature_dir=feature_dir, window=None,
-                         label_path='./data/ground_truth/train_labels/train_labels.shp', smooth=smooth,
-                         engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
-                         fill_missing=fill_missing, check_missing=check_missing,
-                         vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='apples')
-        n_feature = len(feature_names)
-        cat_mask = df_tv.cat_mask.values
-        df_train_val, x_train_val, y_train_val = \
-            get_valid_crop_type_x_y(logger, df=df_tv, n_feature=n_feature, dataset='train_val')
-        coords_train_val = gpd.GeoDataFrame({'geometry': df_train_val.coords.values})
+    kullu_dir = img_dir + '43SFR/raster/' if not testing else img_dir + '43SFR/raster_sample/'
+    shimla_dir = img_dir + '43RGQ/raster/' if not testing else img_dir + '43RGQ/raster_sample/'
+
+    # load pretrained model
+    estimator = pickle.load(open(f'./models/{pretrained}.pkl', 'rb'))
+
+    # prepare train and validation dataset
+    df_kullu, meta_kullu, feature_names, polygons_list_kullu = \
+        prepare_data(logger=logger, dataset='train_val', feature_dir=kullu_dir, window=None,
+                        label_path='./data/ground_truth/apples/kullu.shp', smooth=smooth,
+                        engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
+                        fill_missing=fill_missing, check_missing=check_missing,
+                        vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='apple')
+    x_kullu = df_kullu.loc[:, feature_names]
+    df_kullu['cropland_pred'] = estimator.predict(x_kullu)
+    
+    # df_shimla, meta_shimla, _, polygons_list_shimla = \
+    #     prepare_data(logger=logger, dataset='train_val', feature_dir=shimla_dir, window=None,
+    #                     label_path='./data/ground_truth/apples/shimla.shp', smooth=smooth,
+    #                     engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
+    #                     fill_missing=fill_missing, check_missing=check_missing,
+    #                     vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='apple')
+
+    n_feature = len(feature_names)
+    df_pos_kullu, x_pos_kullu, y_pos_kullu = \
+        get_crop_type_x_y_pos(logger, df=df_kullu, n_feature=n_feature, dataset='train_val_kullu')
+    # df_train_val_shimla, x_train_val_shimla, y_train_val_shimla = \
+    #     get_crop_type_x_y_pos(logger, df=df_shimla, n_feature=n_feature, dataset='train_val_shimla')
+    # df_train_val = pd.concat([df_train_val_kullu, df_train_val_shimla], axis=0)
+    # x_train_val = np.concatenate((x_train_val_kullu, x_train_val_shimla), axis=0)
+    # y_train_val = np.concatenate((y_train_val_kullu, y_train_val_shimla), axis=0)
+    # polygons = polygons_list_kullu + polygons_list_shimla
+    
+    df_pos, x_pos, y_pos, polygons = df_pos_kullu, x_pos_kullu, y_pos_kullu, polygons_list_kullu
+    coords_pos = gpd.GeoDataFrame({'geometry': df_pos.coords.values})
 
     # cross validation
     if cv_type == 'random':
         cv = n_fold
     elif cv_type == 'block':
         # assign to fold
-        # TODO: polygons are inconsistent, could use the property that polygons and val are syncronized 
-        polygons_valid = list(np.array(polygons)[np.array(val_list) == 1 or 2])
-        grid = construct_grid_to_fold(polygons_valid, tiles_x=tiles_x, tiles_y=tiles_y, shape=shape,
-                                      data=x_train_val, n_fold=n_fold, random_state=random_state)
+        grid = construct_grid_to_fold(polygons, tiles_x=tiles_x, tiles_y=tiles_y, shape=shape,
+                                      data=x_pos, n_fold=n_fold, random_state=random_state)
         scv = ModifiedBlockCV(custom_polygons=grid, buffer_radius=buffer_radius)
+        # vis
         if args.vis_cv:
             cv_name = f'./figs/croptype_cv_{tiles_x}x{tiles_y}{shape}_f{n_fold}_s{random_state}'
-            visualize_cv_fold(grid, meta, cv_name + '.tiff')
+            visualize_cv_fold(grid, meta_kullu, cv_name + '.tiff')
             logger.info(f'Saved {cv_name}.tiff')
-            visualize_cv_polygons(scv, coords_train_val, meta, cv_name + '_mask.tiff')
+            visualize_cv_polygons(scv, coords_pos, meta_kullu, cv_name + '_mask.tiff')
             logger.info(f'Saved {cv_name}_mask.tiff')
     elif cv_type == 'spatial':
         scv = ModifiedSKCV(n_splits=n_fold, buffer_radius=buffer_radius, random_state=random_state)
         if args.vis_cv:
             cv_name = f'./figs/croptype_cv_{cv_type}_f{n_fold}_s{random_state}'
-            visualize_cv_polygons(scv, coords_train_val, meta, cv_name + '_mask.tiff')
+            visualize_cv_polygons(scv, coords_pos, meta_kullu, cv_name + '_mask.tiff')
             logger.info(f'Saved {cv_name}_mask.tiff')
 
     # pre-defined parameters
@@ -108,39 +129,41 @@ def classifier_crop_type(args):
     }
 
     if train_from == 'cropland':
-        # positive data
-        mask_pos = df_train_val.label.values == 1
-        x_train_val_pos = x_train_val[mask_pos]
-        y_train_val_pos = np.ones(x_train_val_pos.shape[0], type=int)
         # sample unlabeled data
-        unl_idx = sample_unlabeled_idx(mask_pos.argmin(axis=0), x_train_val_pos.shape[0])
-        x_train_val_unl = x_train_val[unl_idx]
-        y_train_val_unl = np.zeros(unl_idx.shape[0], type=int)
-        # concat
-        x_train_val_pu = np.concatenate([x_train_val_pos, x_train_val_unl], axis=0)
-        y_train_val_pu = np.concatenate([y_train_val_pos, y_train_val_unl], axis=0)
+        unl_idx = sample_unlabeled_idx(df_kullu.coords, grid, x_pos.shape[0], meta_kullu)
+        df_unl_kullu = df_kullu.loc[unl_idx, :]
+        coords_unl_kullu = gpd.GeoDataFrame({'geometry': df_unl_kullu.loc[unl_idx, 'coords'].values})
+        x_unl_kullu = df_kullu.loc[unl_idx, feature_names].values
+        y_unl_kullu = np.zeros(unl_idx.shape[0], dtype=int)
+        # concatenate
+        df_pu_kullu = pd.concat([df_pos_kullu, df_unl_kullu], axis=0)
+        x_pu_kullu = np.concatenate((x_pos_kullu, x_unl_kullu), axis=0)
+        y_pu_kullu = np.concatenate((y_pos_kullu, y_unl_kullu), axis=0)
+        coords_pu_kullu = gpd.GeoDataFrame(pd.concat([coords_pos, coords_unl_kullu], axis=0))
         for model_name in models_name:
             logger.info(f'## {model_name.upper()}')
 
             # grid search
             if cv_type:
                 # get model and parameters
-                model, params_dict_grid = get_model_and_params_dict_grid(model_name, random_state, testing)
+                model, params_dict_grid = get_model_and_params_dict_grid(model_name, testing)
                 params_grid = get_addtional_params(params_dict_grid, testing, study_scaling, engineer_feature)
                 logger.info(f'Grid parameters dict {params_grid}')
                 if cv_type == 'block' or cv_type == 'spatial':
-                    cv = scv.split(coords_train_val)
+                    if model_name == 'ocsvm':
+                        cv = scv.split(coords_pos)
+                    else:  # model_name == 'pul' or 'pul-w'
+                        cv = scv.split(coords_pu_kullu)
                 # build pipeline
-                pipe = get_pipeline(model, scaling, study_scaling=study_scaling,
-                                    engineer_feature=engineer_feature, k_feature=k_feature)
+                pipe = get_pipeline(model, scaling, study_scaling, engineer_feature)
                 logger.info(pipe)
                 # search hyperparameters
                 search = GridSearchCV(estimator=pipe, param_grid=params_grid, scoring='recall',
                                       cv=cv, verbose=3, n_jobs=-1)
                 if model_name == 'ocsvm':
-                    search.fit(x_train_val_pos, y_train_val_pos)
+                    search.fit(x_pos_kullu, y_pos_kullu)
                 else:
-                    search.fit(x_train_val_pu, y_train_val_pu)
+                    search.fit(x_pu_kullu, y_pu_kullu)
                 # best parameters
                 logger.info(f"Best score {search.best_score_:.4f} with best parameters: {search.best_params_}")
                 # cross-validation result
@@ -155,24 +178,31 @@ def classifier_crop_type(args):
                                               study_scaling=False, engineer_feature=engineer_feature)
                 logger.info(best_estimator)
                 if model_name == 'ocsvm':
-                    best_estimator.fit(x_train_val_pos, y_train_val_pos)
+                    best_estimator.fit(x_pos_kullu, y_pos_kullu)
                 else:
-                    best_estimator.fit(x_train_val_pu, y_train_val_pu)
+                    best_estimator.fit(x_pu_kullu, y_pu_kullu)
             pickle.dump(best_estimator, open(f'./models/{log_time}_{model_name}.pkl', 'wb'))
 
             # predict and evaluation
-            # TODO: index is wrong in saving 
-            test(logger, best_estimator, x_train_val, y_train_val, meta, df_train_val.index, cat_mask=cat_mask,
-                 pred_name=f'{log_time}_{model_name}_labels',
-                 region_indicator='./data/ground_truth/train_labels/train_labels.shp',
-                 color_by_height=color_by_height)
+            test(logger, best_estimator, x_pu_kullu, y_pu_kullu, meta_kullu, df_pu_kullu.index,
+                 pred_name=f'{log_time}_{model_name}_kullu_labels',
+                 region_indicator='./data/ground_truth/apples/kullu.shp', color_by_height=color_by_height)
+            # test(logger, best_estimator, x_train_val_shimla, y_train_val_shimla, meta_shimla, df_train_val_shimla.index,
+            #      pred_name=f'{log_time}_{model_name}_shimla_labels',
+            #      region_indicator='./data/ground_truth/apples/kullu.shp', color_by_height=color_by_height)
+            
             if not predict_labels_only:
-                x = df_tv.loc[:, feature_names]
-                # TODO: lack cropland_mask 
-                predict(logger, best_estimator, x, meta, cat_mask=cat_mask,
-                        pred_path=f'./preds/{log_time}_{model_name}.tiff',
-                        region_indicator='./data/ground_truth/train_region/train_region.shp',
+                predict(logger, best_estimator, x_kullu, meta_kullu,
+                        pred_path=f'./preds/{log_time}_{model_name}_kullu.tiff', ancillary_dir=ancillary_dir,
+                        region_indicator='./data/ground_truth/apples/kullu.shp',
                         color_by_height=color_by_height)
+                # x_shimla = df_shimla.loc[:, feature_names]
+                # predict(logger, best_estimator, x_shimla, meta_shimla,
+                #         pred_path=f'./preds/{log_time}_{model_name}_shimla.tiff', ancillary_dir=ancillary_dir,
+                #         region_indicator='./data/ground_truth/apples/shimla.shp',
+                #         color_by_height=color_by_height)
+
+
     else:  # train_from == 'scratch'
         pass
 
@@ -182,8 +212,8 @@ if __name__ == '__main__':
     parser.add_argument('--config_filename', type=str,
                         default='./data/config/crop_type_workstation.yaml')
     parser.add_argument('--vis_stack', type=bool, default=False)
-    parser.add_argument('--vis_profile', type=bool, default=False)
-    parser.add_argument('--vis_cv', type=bool, default=False)
+    parser.add_argument('--vis_profile', type=bool, default=True)
+    parser.add_argument('--vis_cv', type=bool, default=True)
 
     args = parser.parse_args()
 

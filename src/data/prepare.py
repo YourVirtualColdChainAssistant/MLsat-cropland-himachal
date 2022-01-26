@@ -106,7 +106,7 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
     if 'predict' not in dataset:
         # get y
         logger.info('# Load raw labels')
-        polygons_list, val_list, labels = load_shp_to_array(label_path, meta)
+        polygons_list, labels = load_shp_to_array(label_path, meta)
         df['label'] = labels.reshape(-1)
         logger.info('# Convert to cropland and crop labels')
         df['gt_cropland'] = df.label.values.copy()
@@ -134,7 +134,7 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
                              label=df.label.values, timestamps=timestamps_weekly_ref, type=vis_profile_type,
                              veg_index=b, title=name.replace('_', ' '), save_path=f"./figs/{name}.png")
         logger.info('ok')
-        return df, meta, feature_names, polygons_list, val_list
+        return df, meta, feature_names, polygons_list
     else:
         logger.info('ok')
         return df, meta, feature_names
@@ -443,7 +443,7 @@ def get_valid_cropland_x_y(logger, df, n_feature, dataset):
     return df_valid, x_valid, y_valid
 
 
-def get_valid_crop_type_x_y(logger, df, n_feature, dataset):
+def get_crop_type_x_y_pos(logger, df, n_feature, dataset):
     """
     Get only the croplands data.
 
@@ -466,7 +466,7 @@ def get_valid_crop_type_x_y(logger, df, n_feature, dataset):
     y_valid: np.array
         shape (n_valid, )
     """
-    mask_valid = (df.label.values == 1) | (df.label.values == 2)
+    mask_valid = (df.label.values == 1)
     df_valid = df[mask_valid]
     x_valid = df_valid.iloc[:, :n_feature].values
     y_valid = df_valid.loc[:, 'label'].values

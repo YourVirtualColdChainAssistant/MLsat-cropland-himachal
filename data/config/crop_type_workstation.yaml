@@ -1,6 +1,6 @@
 data:
   img_dir: /mnt/N/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/
-  ancilliary_dir: /home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/
+  ancillary_dir: /home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/
 train:
   cv_type: block
   tiles_x: 4
@@ -17,12 +17,11 @@ model:
   scaling: as_reflectance
   study_scaling: False
   engineer_feature: temporal+spatial
-  k_feature: 100
   new_bands_name: [ 'ndvi' ]
   smooth: False
   check_SAC: False
   models_name: [ 'ocsvm', 'pul', 'pul-w' ]
-  pretrained: [ '20220105-135132_rfc', '20220105-135132_svc', '20220105-135132_mlp' ]
+  pretrained: 20220105-135132_rfc
 predict:
   predict_labels_only: True
   color_by_height: True

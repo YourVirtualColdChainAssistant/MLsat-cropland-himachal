@@ -49,9 +49,12 @@ def clip_single_raster(shapes, geotiff_path, clip_path, updates=None):
     """
     # read imagery file
     with rasterio.open(geotiff_path) as src:
-        if 'nodata' in updates.keys():
-            out_image, out_transform = mask(src, shapes, crop=True, all_touched=True, nodata=updates['nodata'])
-        else:   
+        if updates:
+            if 'nodata' in updates.keys():
+                out_image, out_transform = mask(src, shapes, crop=True, all_touched=True, nodata=updates['nodata'])
+            else:
+                out_image, out_transform = mask(src, shapes, crop=True, all_touched=True)
+        else:
             out_image, out_transform = mask(src, shapes, crop=True, all_touched=True)
         out_meta = src.meta
 
