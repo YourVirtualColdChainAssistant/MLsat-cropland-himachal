@@ -45,7 +45,6 @@ def classifier_crop_type(args):
     scaling = model_kwargs.get('scaling')
     study_scaling = model_kwargs.get('study_scaling')
     engineer_feature = model_kwargs.get('engineer_feature')
-    k_feature = model_kwargs.get('k_feature')
     new_bands_name = model_kwargs.get('new_bands_name')
     smooth = model_kwargs.get('smooth')
     models_name = model_kwargs.get('models_name')
@@ -54,7 +53,7 @@ def classifier_crop_type(args):
     predict_labels_only = predict_kwargs.get('predict_labels_only')
     color_by_height = predict_kwargs.get('color_by_height')
 
-    testing = True
+    testing = False
     # logger
     log_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
