@@ -14,7 +14,7 @@ from rasterio.merge import merge
 from src.data.load import clean_test_shapefiles
 from src.data.prepare import prepare_data, get_valid_cropland_x_y
 from src.utils.logger import get_log_dir, get_logger
-from src.models.cropland import test, predict
+from src.models.cropland import test, predict, evaluate_by_feature_importance
 
 
 def cropland_predict(args):
@@ -51,7 +51,7 @@ def cropland_predict(args):
     test_far_dir = img_dir + '43RGQ/raster/' if not testing else img_dir + '43RGQ/raster_sample/'
     predict_dir = img_dir + args.tile_id + '/raster/' if not testing else img_dir + args.tile_id + '/raster_sample/'
 
-    if not args.test_regions:
+    if args.action == 'predict':
         # load pretrained model
         logger.info("Loading the best pretrained model...")
         best_estimator = pickle.load(open(f'./models/{pretrained}.pkl', 'rb'))
@@ -96,7 +96,7 @@ def cropland_predict(args):
         logger.info('Merging patches...')
         patches_list = [f for f in glob.glob(pred_path_top + '*.tiff')]
         merge(patches_list, dst_path=pred_path_top + '../' + args.tile_id + '.tiff')
-    else:
+    elif args.action == 'test_separate':
         if testing:
             test_dir_dict = {'kullu': test_near_dir}
         else:
@@ -110,7 +110,7 @@ def cropland_predict(args):
             test_dir = test_dir_dict[district]
             label_path = f'./data/ground_truth/test_labels_{district}/test_labels_{district}.shp'
             # prepare data
-            df_te, meta, feature_names, _, _ = \
+            df_te, meta, feature_names, _ = \
                 prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
                              label_path=label_path, window=None, smooth=smooth,
                              engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
@@ -127,6 +127,41 @@ def cropland_predict(args):
                      pred_name=f'{p}_{district}', ancillary_dir=ancillary_dir, feature_names=None,
                      region_indicator=label_path, color_by_height=color_by_height)
                 # TODO: evaluate by open datasets is not working 
+    else:  # args.action == 'test_together'
+        if testing:
+            test_dir_dict = {'kullu': test_near_dir}
+        else:
+            test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir, 'shimla': test_far_dir}
+            # test_dir_dict = {'shimla': test_far_dir}
+        clean_test_shapefiles()
+
+        # store all test data in an array
+        for district in test_dir_dict.keys():
+            logger.info(f'### Loading {district} data')
+            test_dir = test_dir_dict[district]
+            label_path = f'./data/ground_truth/test_labels_{district}/test_labels_{district}.shp'
+            # prepare data
+            df_te, _, feature_names, _ = \
+                prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
+                             label_path=label_path, window=None, smooth=smooth,
+                             engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
+                             fill_missing=fill_missing, check_missing=check_missing,
+                             vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='cropland',
+                             vis_afterprocess=args.vis_afterprocess)
+            _, x_test_d, y_test_d = \
+                get_valid_cropland_x_y(logger, df=df_te, n_feature=len(feature_names), dataset=f'test_{district}')
+            if district == 'kullu':
+                x_test = x_test_d
+                y_test = y_test_d
+            else:
+                x_test = np.concatenate((x_test, x_test_d), axis=0)
+                y_test = np.concatenate((y_test, y_test_d), axis=0)
+
+        # test    
+        best_estimator = pickle.load(open(f'./models/{pretrained}.pkl', 'rb'))
+        logger.info('Evaluating by feature importance...')
+        evaluate_by_feature_importance(best_estimator['classification'], x_test, y_test, 
+                                       feature_names, f'{pretrained}_test')
 
 
 if __name__ == '__main__':
@@ -135,7 +170,8 @@ if __name__ == '__main__':
                         default='./data/config/cropland_best.yaml')
 
     parser.add_argument('--tile_ids', nargs='+', default=['43SFR'])
-    parser.add_argument('--test_regions', type=bool, default=False)
+    parser.add_argument('--action', type=str, default='test_together', 
+                        choices=['predict', 'test_separate', 'test_together'])
     parser.add_argument('--vis_stack', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)
     parser.add_argument('--vis_afterprocess', type=bool, default=False)
