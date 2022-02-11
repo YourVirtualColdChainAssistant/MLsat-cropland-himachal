@@ -52,13 +52,13 @@ python -m src.data.process --tile_ids 43SFR 43RGQ ...
 To train cropland models:
 
 ```buildoutcfg
-python -m src.train_cropland --config_filename ./data/config/cropland.yaml [--arguments]
+python -m src.train_cropland --config_filename ./data/config/cropland_workstation.yaml [--arguments]
 ```
 
 To predict cropland masks (with exactly the same argument settings found in training):
 
 ```buildoutcfg
-python -m src.predict_cropland --config_filename ./data/config/cropland.yaml [--arguments]
+python -m src.predict_cropland --config_filename ./data/config/cropland_best.yaml [--arguments]
 ```
 
 ## Repository Structure
