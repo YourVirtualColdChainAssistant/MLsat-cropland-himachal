@@ -10,6 +10,7 @@ train:
   n_fold: 3
   random_state: 24
   hp_search_by: grid
+  sample_HP: False
 model:
   composite_by: max
   fill_missing: linear

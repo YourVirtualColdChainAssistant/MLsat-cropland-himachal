@@ -74,7 +74,10 @@ def find_top_level(string, search_path):
 def save_cv_results(cv_results, save_path):
     df = pd.DataFrame()
     # save result
-    for i in ['params', 'mean_test_score', 'std_test_score', 'rank_test_score',
+    for i in ['params', 'mean_test_accuracy', 'std_test_accuracy', 'rank_test_accuracy',
+              'mean_test_precision', 'std_test_precision', 'rank_test_precision',
+              'mean_test_recall', 'std_test_recall', 'rank_test_recall',
+              'mean_test_f1_score', 'std_test_f1_score', 'rank_test_f1_score',
               'mean_fit_time', 'std_fit_time', 'mean_score_time', 'std_score_time']:
         df[i] = cv_results[i]
     df.to_csv(save_path, index=False, header=True)

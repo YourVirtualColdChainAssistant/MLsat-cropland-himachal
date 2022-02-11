@@ -17,7 +17,7 @@ model:
   check_missing: False
   scaling: as_reflectance
   study_scaling: False
-  engineer_feature: temporal+spatial
+  engineer_feature: temporal
   new_bands_name: ['ndvi']
   smooth: False
   check_SAC: False

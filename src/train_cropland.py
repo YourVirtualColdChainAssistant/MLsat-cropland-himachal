@@ -8,6 +8,7 @@ import numpy as np
 import geopandas as gpd
 import skgstat as skg
 from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, make_scorer
 
 from src.data.load import clean_train_shapefiles
 from src.data.prepare import prepare_data, prepare_HP_data, get_valid_cropland_x_y
@@ -76,7 +77,7 @@ def cropland_classification(args):
                             fill_missing=fill_missing, check_missing=check_missing, composite_by=composite_by)
 
     # prepare train and validation dataset
-    df_tv, meta, feature_names, polygons, _ = \
+    df_tv, meta, feature_names, polygons = \
         prepare_data(logger=logger, dataset='train_val', feature_dir=feature_dir, window=None,
                      label_path='./data/ground_truth/train_labels/train_labels.shp', smooth=smooth,
                      engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
@@ -137,7 +138,11 @@ def cropland_classification(args):
             pipe = get_pipeline(model, scaling, study_scaling=study_scaling, engineer_feature=engineer_feature)
             logger.info(pipe)
             # search hyperparameters
-            search = GridSearchCV(estimator=pipe, param_grid=params_grid, scoring='accuracy', cv=cv, verbose=3, n_jobs=-1)
+            scoring = {'accuracy': make_scorer(accuracy_score), 
+                       'precision': make_scorer(precision_score, pos_label=2), 
+                       'recall': make_scorer(recall_score, pos_label=2), 
+                       'f1_score': make_scorer(f1_score, pos_label=2)}
+            search = GridSearchCV(estimator=pipe, param_grid=params_grid, scoring=scoring, refit='accuracy', cv=cv, verbose=3, n_jobs=-1)
             search.fit(x_train_val, y_train_val)
             # best parameters
             logger.info(f"Best score {search.best_score_:.4f} with best parameters: {search.best_params_}")
