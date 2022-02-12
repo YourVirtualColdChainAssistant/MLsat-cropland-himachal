@@ -160,7 +160,7 @@ def cropland_predict(args):
         # test    
         best_estimator = pickle.load(open(f'model/{pretrained}.pkl', 'rb'))
         logger.info('Evaluating by feature importance...')
-        evaluate_by_feature_importance(best_estimator['classification'], x_test, y_test, 
+        evaluate_by_feature_importance(best_estimator['classification'], x_test, y_test,
                                        feature_names, f'{pretrained}_test')
 
 
@@ -170,7 +170,7 @@ if __name__ == '__main__':
                         default='./data/config/cropland_best.yaml')
 
     parser.add_argument('--tile_ids', nargs='+', default=['43SFR'])
-    parser.add_argument('--action', type=str, default='test_together', 
+    parser.add_argument('--action', type=str, default='test_together',
                         choices=['predict', 'test_separate', 'test_together'])
     parser.add_argument('--vis_stack', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)

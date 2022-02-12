@@ -70,13 +70,13 @@ def classifier_crop_type(args):
     # prepare train and validation dataset
     df_kullu, meta_kullu, feature_names, polygons_list_kullu = \
         prepare_data(logger=logger, dataset='train_val', feature_dir=kullu_dir, window=None,
-                        label_path='./data/ground_truth/apples/kullu.shp', smooth=smooth,
-                        engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
-                        fill_missing=fill_missing, check_missing=check_missing,
-                        vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='apple')
+                     label_path='./data/ground_truth/apples/kullu.shp', smooth=smooth,
+                     engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
+                     fill_missing=fill_missing, check_missing=check_missing,
+                     vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='apple')
     x_kullu = df_kullu.loc[:, feature_names]
     df_kullu['cropland_pred'] = estimator.predict(x_kullu)
-    
+
     # df_shimla, meta_shimla, _, polygons_list_shimla = \
     #     prepare_data(logger=logger, dataset='train_val', feature_dir=shimla_dir, window=None,
     #                     label_path='./data/ground_truth/apples/shimla.shp', smooth=smooth,
@@ -93,7 +93,7 @@ def classifier_crop_type(args):
     # x_train_val = np.concatenate((x_train_val_kullu, x_train_val_shimla), axis=0)
     # y_train_val = np.concatenate((y_train_val_kullu, y_train_val_shimla), axis=0)
     # polygons = polygons_list_kullu + polygons_list_shimla
-    
+
     df_pos, x_pos, y_pos, polygons = df_pos_kullu, x_pos_kullu, y_pos_kullu, polygons_list_kullu
     coords_pos = gpd.GeoDataFrame({'geometry': df_pos.coords.values})
 
@@ -189,7 +189,7 @@ def classifier_crop_type(args):
             # test(logger, best_estimator, x_train_val_shimla, y_train_val_shimla, meta_shimla, df_train_val_shimla.index,
             #      pred_name=f'{log_time}_{model_name}_shimla_labels',
             #      region_indicator='./data/ground_truth/apples/kullu.shp', color_by_height=color_by_height)
-            
+
             if not predict_labels_only:
                 predict(logger, best_estimator, x_kullu, meta_kullu,
                         pred_path=f'./preds/{log_time}_{model_name}_kullu.tiff', ancillary_dir=ancillary_dir,

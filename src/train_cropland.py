@@ -138,11 +138,12 @@ def cropland_classification(args):
             pipe = get_pipeline(model, scaling, study_scaling=study_scaling, engineer_feature=engineer_feature)
             logger.info(pipe)
             # search hyperparameters
-            scoring = {'accuracy': make_scorer(accuracy_score), 
-                       'precision': make_scorer(precision_score, pos_label=2), 
-                       'recall': make_scorer(recall_score, pos_label=2), 
+            scoring = {'accuracy': make_scorer(accuracy_score),
+                       'precision': make_scorer(precision_score, pos_label=2),
+                       'recall': make_scorer(recall_score, pos_label=2),
                        'f1_score': make_scorer(f1_score, pos_label=2)}
-            search = GridSearchCV(estimator=pipe, param_grid=params_grid, scoring=scoring, refit='accuracy', cv=cv, verbose=3, n_jobs=-1)
+            search = GridSearchCV(estimator=pipe, param_grid=params_grid, scoring=scoring, refit='accuracy', cv=cv,
+                                  verbose=3, n_jobs=-1)
             search.fit(x_train_val, y_train_val)
             # best parameters
             logger.info(f"Best score {search.best_score_:.4f} with best parameters: {search.best_params_}")
