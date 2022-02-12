@@ -9,9 +9,9 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 
 from src.data.prepare import prepare_data, get_crop_type_x_y_pos
-from src.models.crop_type import get_model_and_params_dict_grid, get_best_model_initial, test, predict, \
+from src.model.crop_type import get_model_and_params_dict_grid, get_best_model_initial, test, predict, \
     sample_unlabeled_idx
-from src.models.util import get_pipeline, get_addtional_params
+from src.model.util import get_pipeline, get_addtional_params
 from src.utils.logger import get_log_dir, get_logger
 from src.utils.scv import construct_grid_to_fold, ModifiedBlockCV, ModifiedSKCV
 from src.utils.util import save_cv_results
@@ -65,7 +65,7 @@ def classifier_crop_type(args):
     shimla_dir = img_dir + '43RGQ/raster/' if not testing else img_dir + '43RGQ/raster_sample/'
 
     # load pretrained model
-    estimator = pickle.load(open(f'./models/{pretrained}.pkl', 'rb'))
+    estimator = pickle.load(open(f'model/{pretrained}.pkl', 'rb'))
 
     # prepare train and validation dataset
     df_kullu, meta_kullu, feature_names, polygons_list_kullu = \
@@ -180,7 +180,7 @@ def classifier_crop_type(args):
                     best_estimator.fit(x_pos_kullu, y_pos_kullu)
                 else:
                     best_estimator.fit(x_pu_kullu, y_pu_kullu)
-            pickle.dump(best_estimator, open(f'./models/{log_time}_{model_name}.pkl', 'wb'))
+            pickle.dump(best_estimator, open(f'model/{log_time}_{model_name}.pkl', 'wb'))
 
             # predict and evaluation
             test(logger, best_estimator, x_pu_kullu, y_pu_kullu, meta_kullu, df_pu_kullu.index,

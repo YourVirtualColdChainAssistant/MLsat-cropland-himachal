@@ -4,7 +4,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import classification_report
 
 from src.data.write import save_predictions_geotiff
-from src.models.util import convert_partial_predictions
+from src.model.util import convert_partial_predictions
 from src.evaluation.evaluate import evaluate_by_gfsad, evaluate_by_copernicus, \
     impurity_importance_table, permutation_importance_table
 from src.evaluation.util import adjust_raster_size

@@ -14,7 +14,7 @@ from rasterio.merge import merge
 from src.data.load import clean_test_shapefiles
 from src.data.prepare import prepare_data, get_valid_cropland_x_y
 from src.utils.logger import get_log_dir, get_logger
-from src.models.cropland import test, predict, evaluate_by_feature_importance
+from src.model.cropland import test, predict, evaluate_by_feature_importance
 
 
 def cropland_predict(args):
@@ -54,7 +54,7 @@ def cropland_predict(args):
     if args.action == 'predict':
         # load pretrained model
         logger.info("Loading the best pretrained model...")
-        best_estimator = pickle.load(open(f'./models/{pretrained}.pkl', 'rb'))
+        best_estimator = pickle.load(open(f'model/{pretrained}.pkl', 'rb'))
 
         # read and predict in patches
         with rasterio.open(predict_dir + os.listdir(predict_dir)[0], 'r') as f:
@@ -122,7 +122,7 @@ def cropland_predict(args):
                 get_valid_cropland_x_y(logger, df=df_te, n_feature=n_feature, dataset=f'test_{district}')
             # test
             for p in pretrained:
-                best_estimator = pickle.load(open(f'./models/{p}.pkl', 'rb'))
+                best_estimator = pickle.load(open(f'model/{p}.pkl', 'rb'))
                 test(logger, best_estimator, x_test, y_test, meta, index=df_test.index,
                      pred_name=f'{p}_{district}', ancillary_dir=ancillary_dir, feature_names=None,
                      region_indicator=label_path, color_by_height=color_by_height)
@@ -158,7 +158,7 @@ def cropland_predict(args):
                 y_test = np.concatenate((y_test, y_test_d), axis=0)
 
         # test    
-        best_estimator = pickle.load(open(f'./models/{pretrained}.pkl', 'rb'))
+        best_estimator = pickle.load(open(f'model/{pretrained}.pkl', 'rb'))
         logger.info('Evaluating by feature importance...')
         evaluate_by_feature_importance(best_estimator['classification'], x_test, y_test, 
                                        feature_names, f'{pretrained}_test')

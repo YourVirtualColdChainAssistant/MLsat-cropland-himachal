@@ -15,8 +15,8 @@ from src.data.prepare import prepare_data, prepare_HP_data, get_valid_cropland_x
 from src.utils.logger import get_log_dir, get_logger
 from src.utils.util import save_cv_results
 from src.utils.scv import ModifiedBlockCV, ModifiedSKCV, construct_grid_to_fold
-from src.models.util import get_pipeline, get_addtional_params
-from src.models.cropland import get_model_and_params_dict_grid, get_best_model_initial, test, predict
+from src.model.util import get_pipeline, get_addtional_params
+from src.model.cropland import get_model_and_params_dict_grid, get_best_model_initial, test, predict
 from src.evaluation.visualize import visualize_cv_fold, visualize_cv_polygons
 
 
@@ -158,7 +158,7 @@ def cropland_classification(args):
                                           study_scaling=False, engineer_feature=engineer_feature)
             logger.info(best_estimator)
             best_estimator.fit(x_train_val, y_train_val)
-        pickle.dump(best_estimator, open(f'./models/{log_time}_{model_name}.pkl', 'wb'))
+        pickle.dump(best_estimator, open(f'model/{log_time}_{model_name}.pkl', 'wb'))
 
         # predict and evaluation
         test(logger, best_estimator, x_train_val, y_train_val, meta, df_train_val.index,
