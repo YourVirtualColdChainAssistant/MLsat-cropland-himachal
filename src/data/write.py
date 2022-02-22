@@ -29,7 +29,7 @@ def save_predictions_geotiff(predictions, save_path, meta,
     """
     if color_by_height:
         # relative path of altitude data
-        height_map_path = '../../../Data/layers_india/ancilliary_data/elevation/IND_alt.vrt'
+        height_map_path = 'elevation/IND_alt.vrt' # '../../../Data/layers_india/ancilliary_data/elevation/IND_alt.vrt'
         adjust_raster_size(height_map_path, f'./data/open_datasets/{hm_name}.tiff',
                            region_indicator=region_indicator, meta=meta, label_only=False)
         with rasterio.open(f'./data/open_datasets/{hm_name}.tiff') as f:
