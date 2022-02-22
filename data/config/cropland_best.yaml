@@ -1,6 +1,6 @@
 data:
-  img_dir: /mnt/N/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/
-  ancillary_dir: /home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/
+  img_dir: N:\dataorg-datasets\MLsatellite\sentinel2_images\images_danya\ #/mnt/N/dataorg-datasets/MLsatellite/sentinel2_images/images_danya/
+  ancillary_dir: K:\2021-data-org\4. RESEARCH_n\ML\MLsatellite\Data\layers_india\ancilliary_data\ #/home/lida/DFS/Projects/2021-data-org/4. RESEARCH_n/ML/MLsatellite/Data/layers_india/ancilliary_data/
 train:
   cv_type: 
   tiles_x: 4
@@ -26,4 +26,3 @@ model:
 predict:
   predict_labels_only: False
   color_by_height: True
-  

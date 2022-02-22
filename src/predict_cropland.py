@@ -39,6 +39,8 @@ def cropland_predict(args):
     color_by_height = predict_kwargs.get('color_by_height')
 
     testing = False
+    
+
 
     # logger
     log_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -50,6 +52,7 @@ def cropland_predict(args):
     test_near_dir = img_dir + '43SFR/raster/' if not testing else img_dir + '43SFR/raster_sample/'
     test_far_dir = img_dir + '43RGQ/raster/' if not testing else img_dir + '43RGQ/raster_sample/'
     predict_dir = img_dir + args.tile_id + '/raster/' if not testing else img_dir + args.tile_id + '/raster_sample/'
+    
 
     if args.action == 'predict':
         # load pretrained model
@@ -64,9 +67,10 @@ def cropland_predict(args):
         logger.info(f'Tile size: {full_len}x{full_len}, num / side: {n_patch}, side size: {patch_len}')
 
         # check path existence
-        pred_path_top = f'{img_dir}predictions/{pretrained}/{args.tile_id}/'
+        pred_path_top =  f'preds/' #f'{img_dir}predictions/{pretrained}/{args.tile_id}/'
         if not os.path.isdir(pred_path_top):
             os.makedirs(pred_path_top)
+
 
         # predict patch by patch
         for row in np.linspace(0, full_len, n_patch, endpoint=False, dtype=int):
@@ -100,8 +104,9 @@ def cropland_predict(args):
         if testing:
             test_dir_dict = {'kullu': test_near_dir}
         else:
-            test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir, 'shimla': test_far_dir}
+             test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir, 'shimla': test_far_dir}
             # test_dir_dict = {'shimla': test_far_dir}
+            # test_dir_dict = {'survey_near': test_near_dir, 'survey_far': test_far_dir}
         clean_test_shapefiles()
 
         pretrained = [pretrained] if isinstance(pretrained, str) else pretrained
@@ -109,6 +114,7 @@ def cropland_predict(args):
             logger.info(f'### Test on {district}')
             test_dir = test_dir_dict[district]
             label_path = f'./data/ground_truth/test_labels_{district}/test_labels_{district}.shp'
+            # label_path = f'./data/ground_truth/test_labels_{district}/polygons_surveys_20210716_20210825_20211213_20220103.shp'
             # prepare data
             df_te, meta, feature_names, _ = \
                 prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
