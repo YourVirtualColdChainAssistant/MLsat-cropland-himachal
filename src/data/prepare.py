@@ -85,12 +85,15 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
     else:
         meta, descriptions = get_meta_descriptions(feature_dir, window)
 
+    
     df, bands_array, meta, feature_names, bands_name, timestamps_weekly_ref = \
         prepare_x(logger, dataset, feature_dir, window, meta, descriptions,
                   scaling=scaling, smooth=smooth,
                   engineer_feature=engineer_feature, new_bands_name=new_bands_name,
                   way=way, fill_missing=fill_missing, check_missing=check_missing,
                   vis_stack=vis_stack, composite_by=composite_by)
+    
+    
     
     if vis_afterprocess:
         meta_out = meta.copy()
@@ -156,7 +159,7 @@ def prepare_HP_data(logger, img_dir, sample_HP_path,
         # TODO: poly.buffer()
         project = pyproj.Transformer.from_proj(sample.crs, meta_tile['crs'], always_xy=True)
         poly = shapely.ops.transform(project.transform, poly)
-        window = get_window(meta_tile['transform'], poly.bounds)
+        window = ow(meta_tile['transform'], poly.bounds)
         meta, descriptions = get_meta_descriptions(feature_dir, window)
 
         df_tile, _, meta, _, _, _ = \
@@ -502,7 +505,13 @@ def get_meta_window_descriptions(geotiff_dir, label_path):
     transform, dst_crs, descriptions = img.transform, img.crs, img.descriptions
 
     label_shp = gpd.read_file(label_path)
+    
+    # Filtering for a distrixt
+    label_shp = label_shp[label_shp.district=='Kullu']
+
     label_shp = label_shp.to_crs(dst_crs)
+    
+
     window = get_window(transform, label_shp.total_bounds)
 
     _, meta = load_geotiff(img_path, window, read_as='as_integer')
