@@ -104,6 +104,30 @@ def clean_test_far_shapefiles():
     label_shp[label_shp.district.values == 'Shimla'].to_file(shimla_path)
 
 
+def clean_random_shapefile(label_path):
+    """For data that is distirbuted over the 3 regions"""
+    label_shp = gpd.read_file(label_path)
+    # delete empty polygons and split multipolygons
+    label_shp = label_shp.dropna().reset_index(drop=True)
+    label_shp = multipolygons_to_polygons(label_shp)
+    # Split over the 3 regions and save into new files
+    # check whether the dir exists
+    mandi_path = './data/ground_truth/test_labels_combined/test_labels_mandi.shp'
+    shimla_path = './data/ground_truth/test_labels_combined/test_labels_shimla.shp'
+    kullu_path = './data/ground_truth/test_labels_combined/test_labels_kullu.shp'
+    if not os.path.exists(mandi_path.rstrip(mandi_path.split('/')[-1])):
+        os.makedirs(mandi_path.rstrip(mandi_path.split('/')[-1]))
+    if not os.path.exists(shimla_path.rstrip(shimla_path.split('/')[-1])):
+        os.makedirs(shimla_path.rstrip(shimla_path.split('/')[-1]))
+    if not os.path.exists(kullu_path.rstrip(kullu_path.split('/')[-1])):
+        os.makedirs(kullu_path.rstrip(kullu_path.split('/')[-1]))
+    label_shp[label_shp.district.values == 'Mandi'].to_file(mandi_path)
+    label_shp[label_shp.district.values == 'Shimla'].to_file(shimla_path)
+    label_shp[label_shp.district.values == 'Kullu'].to_file(kullu_path)
+    
+
+
+
 def save_label_in_region(label_shp, region_shp, save_to_path):
     if label_shp.crs != region_shp.crs:
         if label_shp.crs is None:

@@ -505,13 +505,8 @@ def get_meta_window_descriptions(geotiff_dir, label_path):
     transform, dst_crs, descriptions = img.transform, img.crs, img.descriptions
 
     label_shp = gpd.read_file(label_path)
-    
-    # Filtering for a distrixt
-    label_shp = label_shp[label_shp.district=='Kullu']
-
     label_shp = label_shp.to_crs(dst_crs)
     
-
     window = get_window(transform, label_shp.total_bounds)
 
     _, meta = load_geotiff(img_path, window, read_as='as_integer')

@@ -11,7 +11,7 @@ import rasterio
 from rasterio.windows import Window
 from rasterio.merge import merge
 
-from src.data.load import clean_test_shapefiles
+from src.data.load import clean_test_shapefiles, clean_random_shapefile
 from src.data.prepare import prepare_data, get_valid_cropland_x_y
 from src.utils.logger import get_log_dir, get_logger
 from src.model.cropland import test, predict, evaluate_by_feature_importance
@@ -104,17 +104,51 @@ def cropland_predict(args):
         if testing:
             test_dir_dict = {'kullu': test_near_dir}
         else:
-             test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir, 'shimla': test_far_dir}
+            test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir, 'shimla': test_far_dir}
             # test_dir_dict = {'shimla': test_far_dir}
-            # test_dir_dict = {'survey_near': test_near_dir, 'survey_far': test_far_dir}
         clean_test_shapefiles()
 
         pretrained = [pretrained] if isinstance(pretrained, str) else pretrained
         for district in test_dir_dict.keys():
             logger.info(f'### Test on {district}')
             test_dir = test_dir_dict[district]
-            label_path = f'./data/ground_truth/test_labels_{district}/test_labels_{district}.shp'
-            # label_path = f'./data/ground_truth/test_labels_{district}/polygons_surveys_20210716_20210825_20211213_20220103.shp'
+            #label_path = f'./data/ground_truth/test_labels_{district}/test_labels_{district}.shp'
+            label_path = f'./data/ground_truth/test_labels_combined/polygons_surveys_20210716_20210825_20211213_20220103.shp'
+            # prepare data
+            df_te, meta, feature_names, _ = \
+                prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
+                             label_path=label_path, window=None, smooth=smooth,
+                             engineer_feature=engineer_feature, scaling=scaling, new_bands_name=new_bands_name,
+                             fill_missing=fill_missing, check_missing=check_missing,
+                             vis_stack=args.vis_stack, vis_profile=args.vis_profile, vis_profile_type='cropland',
+                             vis_afterprocess=args.vis_afterprocess)
+            n_feature = len(feature_names)
+            df_test, x_test, y_test = \
+                get_valid_cropland_x_y(logger, df=df_te, n_feature=n_feature, dataset=f'test_{district}')
+            # test
+            for p in pretrained:
+                best_estimator = pickle.load(open(f'model/{p}.pkl', 'rb'))
+                test(logger, best_estimator, x_test, y_test, meta, index=df_test.index,
+                     pred_name=f'{p}_{district}', ancillary_dir=ancillary_dir, feature_names=None,
+                     region_indicator=label_path, color_by_height=color_by_height)
+                # TODO: evaluate by open datasets is not working 
+    elif args.action == 'test_random_shp':
+        """
+        Instead of giving labels of a region only, 
+        provide a shapefile that could contain regions beyond the size of a satellite tile/contained over several tiles
+        Make sure that label_path points to the shp you want to test
+        Make sure that the paths in clean_random_shp (load.py) are adapted to your setup
+        """
+        label_path = f'./data/ground_truth/test_labels_combined/polygons_surveys_20210716_20210825_20211213_20220103.shp'
+        clean_random_shapefile(label_path)
+
+        test_dir_dict = {'kullu': test_near_dir, 'mandi': test_far_dir, 'shimla': test_far_dir}
+
+        pretrained = [pretrained] if isinstance(pretrained, str) else pretrained
+        for district in test_dir_dict.keys():
+            logger.info(f'### Test on {district}')
+            test_dir = test_dir_dict[district]
+            
             # prepare data
             df_te, meta, feature_names, _ = \
                 prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,
@@ -177,7 +211,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--tile_ids', nargs='+', default=['43SFR'])
     parser.add_argument('--action', type=str, default='test_together',
-                        choices=['predict', 'test_separate', 'test_together'])
+                        choices=['predict', 'test_separate','test_random_shp', 'test_together'])
     parser.add_argument('--vis_stack', type=bool, default=False)
     parser.add_argument('--vis_profile', type=bool, default=False)
     parser.add_argument('--vis_afterprocess', type=bool, default=False)
