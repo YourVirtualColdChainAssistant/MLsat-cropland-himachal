@@ -112,8 +112,8 @@ def cropland_predict(args):
         for district in test_dir_dict.keys():
             logger.info(f'### Test on {district}')
             test_dir = test_dir_dict[district]
-            #label_path = f'./data/ground_truth/test_labels_{district}/test_labels_{district}.shp'
-            label_path = f'./data/ground_truth/test_labels_combined/polygons_surveys_20210716_20210825_20211213_20220103.shp'
+            label_path = f'./data/ground_truth/test_labels_{district}/test_labels_{district}.shp'
+            #label_path = f'./data/ground_truth/test_labels_combined/polygons_surveys_20210716_20210825_20211213_20220103.shp'
             # prepare data
             df_te, meta, feature_names, _ = \
                 prepare_data(logger=logger, dataset=f'test_{district}', feature_dir=test_dir,

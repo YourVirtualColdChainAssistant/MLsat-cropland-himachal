@@ -112,20 +112,25 @@ def clean_random_shapefile(label_path):
     label_shp = multipolygons_to_polygons(label_shp)
     # Split over the 3 regions and save into new files
     # check whether the dir exists
-    mandi_path = './data/ground_truth/test_labels_combined/test_labels_mandi.shp'
-    shimla_path = './data/ground_truth/test_labels_combined/test_labels_shimla.shp'
-    kullu_path = './data/ground_truth/test_labels_combined/test_labels_kullu.shp'
-    if not os.path.exists(mandi_path.rstrip(mandi_path.split('/')[-1])):
-        os.makedirs(mandi_path.rstrip(mandi_path.split('/')[-1]))
-    if not os.path.exists(shimla_path.rstrip(shimla_path.split('/')[-1])):
-        os.makedirs(shimla_path.rstrip(shimla_path.split('/')[-1]))
-    if not os.path.exists(kullu_path.rstrip(kullu_path.split('/')[-1])):
-        os.makedirs(kullu_path.rstrip(kullu_path.split('/')[-1]))
-    label_shp[label_shp.district.values == 'Mandi'].to_file(mandi_path)
-    label_shp[label_shp.district.values == 'Shimla'].to_file(shimla_path)
-    label_shp[label_shp.district.values == 'Kullu'].to_file(kullu_path)
+    label_path_dict = []
+    if not label_shp[label_shp.district.values == 'Mandi'].empty:
+        mandi_path = './data/ground_truth/test_labels_combined/test_labels_mandi.shp'
+        if not os.path.exists(mandi_path.rstrip(mandi_path.split('/')[-1])):
+            os.makedirs(mandi_path.rstrip(mandi_path.split('/')[-1]))
+        label_shp[label_shp.district.values == 'Mandi'].to_file(mandi_path)
+    if not label_shp[label_shp.district.values == 'Shimla'].empty:
+        shimla_path = './data/ground_truth/test_labels_combined/test_labels_shimla.shp'
+        if not os.path.exists(shimla_path.rstrip(shimla_path.split('/')[-1])):
+            os.makedirs(shimla_path.rstrip(shimla_path.split('/')[-1]))
+        label_shp[label_shp.district.values == 'Shimla'].to_file(shimla_path)
+    if not label_shp[label_shp.district.values == 'Kullu'].empty:
+        kullu_path = './data/ground_truth/test_labels_combined/test_labels_kullu.shp'
+        if not os.path.exists(kullu_path.rstrip(kullu_path.split('/')[-1])):
+            os.makedirs(kullu_path.rstrip(kullu_path.split('/')[-1]))
+        label_shp[label_shp.district.values == 'Kullu'].to_file(kullu_path)
     
-
+    return mandi_path, shimla_path, kullu_path
+    
 
 
 def save_label_in_region(label_shp, region_shp, save_to_path):

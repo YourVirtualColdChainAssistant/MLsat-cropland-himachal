@@ -111,9 +111,12 @@ def prepare_data(logger, dataset, feature_dir, label_path, window=None,
         logger.info('# Load raw labels')
         polygons_list, labels = load_shp_to_array(label_path, meta)
         df['label'] = labels.reshape(-1)
+        print('Labels added in df', df.label.unique())
         logger.info('# Convert to cropland and crop labels')
         df['gt_cropland'] = df.label.values.copy()
         df.loc[df.label.values == 1, 'gt_cropland'] = 2
+        print('Modified gt values', df.gt_cropland.unique())
+
 
         # add coordinates
         logger.info('# Add coordinates')
@@ -469,7 +472,7 @@ def get_crop_type_x_y_pos(logger, df, n_feature, dataset):
     y_valid: np.array
         shape (n_valid, )
     """
-    mask_valid = (df.label.values == 1)
+    mask_valid = (df.label.values != 0)
     df_valid = df[mask_valid]
     x_valid = df_valid.iloc[:, :n_feature].values
     y_valid = df_valid.loc[:, 'label'].values
@@ -478,6 +481,26 @@ def get_crop_type_x_y_pos(logger, df, n_feature, dataset):
     logger.info(f'y_{dataset} with 2 classes:')
     count_classes(logger, df_valid.label.values)
     return df_valid, x_valid, y_valid
+
+
+def get_unlabeled_pixels(logger, df, size, n_feature, dataset):
+    # was in prepare.py
+    
+    mask_valid = (df.label.values == 0)
+    idx_to_sample = df[mask_valid].index
+    # Could also apply gaussian filter here
+    if size is None:
+        # Take all unlabeled pixels
+        sampled_idx = idx_to_sample
+    if size is not None:
+        sampled_idx = np.random.choice(idx_to_sample, size, replace=False)
+    df_unl = df.iloc[sampled_idx, :]
+    x_unl = df_unl.iloc[:, :n_feature].values
+    y_unl = df_unl.loc[:, 'label'].values
+    count_classes(logger, df_unl.label.values)
+
+    return df_unl, x_unl, y_unl
+
 
 
 def get_meta_window_descriptions(geotiff_dir, label_path):

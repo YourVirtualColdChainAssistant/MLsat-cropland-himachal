@@ -5,12 +5,12 @@ import rasterio
 from shapely.geometry import Point
 from sklearn.svm import SVC, OneClassSVM
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import recall_score
+from sklearn.metrics import recall_score, accuracy_score, classification_report
 from pulearn import ElkanotoPuClassifier, WeightedElkanotoPuClassifier
 
 from src.data.load import load_geotiff
 from src.data.write import save_predictions_geotiff
-from src.models.util import convert_partial_predictions
+from src.model.util import convert_partial_predictions
 
 
 def test(logger, model, x_test, y_test, meta, index,
@@ -44,6 +44,7 @@ def test(logger, model, x_test, y_test, meta, index,
     logger.info("## Testing")
     # predict
     y_test_pred = model.predict(x_test)
+    print(y_test_pred)
     y_test_pred_converted = convert_partial_predictions(y_test_pred, index, meta['height'] * meta['width'])
     # save prediction
     pred_path = f'./preds/{pred_name}.tiff'
@@ -51,9 +52,10 @@ def test(logger, model, x_test, y_test, meta, index,
                              region_indicator=region_indicator, color_by_height=color_by_height)
     logger.info(f'Saved predictions to {pred_path}')
     # evaluate
-    logger.info('Evaluating by recall...')
-    recall = evaluate_by_recall(y_test, y_test_pred)
-    logger.info(f'\n{recall}')
+    logger.info('Evaluating by metrics...')
+    metrics = evaluate_by_metrics(y_test, y_test_pred)
+    logger.info(f'\n{metrics}')
+
 
 
 def predict(logger, model, x, meta, cropland_mask,
@@ -150,6 +152,16 @@ def sample_unlabeled_idx(coords, grid, size, meta):
 
 def evaluate_by_recall(y_test, y_test_pred):
     return recall_score(y_test, y_test_pred, average='macro')
+
+
+def evaluate_by_accuracy(y_test, y_test_pred):
+    return accuracy_score(y_test, y_test_pred, average='macro')
+
+
+def evaluate_by_metrics(y_test, y_test_pred):
+    # !! `labels` is related to the discrete number
+    return classification_report(y_test, y_test_pred, labels=[2, 3], target_names=['apples', 'non-apples'])
+
 
 
 def get_model_and_params_dict_grid(model_name, testing):
