@@ -17,7 +17,6 @@ def load_shp_to_array(shp_path, meta):
     iterable = iter([(feature, val) for feature, val in zip(features_list, val_list)])
     img = rasterio.features.rasterize(iterable, out_shape=(meta['height'], meta['width']),
                                       transform=meta['transform'])
-    print('  ok')
     return features_list, img
 
 
